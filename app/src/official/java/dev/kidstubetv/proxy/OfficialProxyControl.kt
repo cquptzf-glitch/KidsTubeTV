@@ -24,7 +24,9 @@ internal class OfficialProxyControl : ProxyControlBackend {
 
     override fun select(group: String, node: String, done: (Result<String>) -> Unit) {
         invoke("proxy.select",
-            JSONObject().put("group-name", group).put("proxy-name", node), done)
+            JSONObject().put("group-name", group).put("proxy-name", node)) { result ->
+            done(result.mapCatching { OfficialCoreProtocol.validateSelection(it) })
+        }
     }
 
     override fun testNode(node: String, done: (Result<String>) -> Unit) {
@@ -58,10 +60,9 @@ internal class OfficialProxyControl : ProxyControlBackend {
         runCatching {
             Mobile.invokeMethod(request.toString(), ResultHandler { response ->
                 val result = runCatching {
-                    val envelope = JSONObject(response?.toString(Charsets.UTF_8) ?: error("内核未响应"))
-                    val failure = envelope.optJSONObject("error")
-                    if (failure != null) error(failure.optString("message", "代理操作失败"))
-                    envelope.opt("result")?.toString() ?: "{}"
+                    OfficialCoreProtocol.parse(
+                        response?.toString(Charsets.UTF_8) ?: error("内核未响应")
+                    )
                 }
                 main.post { done(result) }
             })
