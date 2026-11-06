@@ -7,22 +7,32 @@ import java.net.URL
 
 /** YouTube Data API v3, never retrieves video from undocumented endpoints. */
 class YouTubeRepository(private val settings: SettingsStore) {
+    companion object {
+        private val searchIds = SearchIdCache()
+    }
+
     fun search(query: String): List<KidVideo> {
-        require(query.length in 1..128) { "搜索词长度不正确" }
-        val result = get("search", mapOf(
-            "part" to "snippet",
-            "type" to "video",
-            "q" to query,
-            "maxResults" to "30",
-            "safeSearch" to "strict",
-            "videoEmbeddable" to "true",
-        ))
-        val ids = result.optJSONArray("items")?.let { a ->
-            (0 until a.length()).mapNotNull {
-                a.optJSONObject(it)?.optJSONObject("id")?.optString("videoId")
-                    ?.takeIf { id -> id.matches(Regex("[A-Za-z0-9_-]{11}")) }
-            }
-        }.orEmpty()
+        val cleaned = query.trim()
+        require(cleaned.length in 1..128) { "搜索词长度不正确" }
+        val ids = searchIds.get(cleaned) ?: run {
+            val result = get("search", mapOf(
+                "part" to "snippet",
+                "type" to "video",
+                "q" to cleaned,
+                "maxResults" to "30",
+                "safeSearch" to "strict",
+                "videoEmbeddable" to "true",
+            ))
+            val loaded = result.optJSONArray("items")?.let { a ->
+                (0 until a.length()).mapNotNull {
+                    a.optJSONObject(it)?.optJSONObject("id")?.optString("videoId")
+                        ?.takeIf { id -> id.matches(Regex("[A-Za-z0-9_-]{11}")) }
+                }
+            }.orEmpty()
+            searchIds.put(cleaned, loaded)
+            loaded
+        }
+        // A cached search never bypasses per-video, per-channel admission.
         return lookup(ids)
     }
 
