@@ -168,41 +168,11 @@ class SettingsStore(context: Context) {
 
     fun writeProfile(content: String) = synchronized(PROFILE_LOCK) {
         SubscriptionFormat.validateYaml(content)
-        val file = profileFile
-        require(file.parentFile?.mkdirs() == true || file.parentFile?.isDirectory == true) {
-            "无法创建代理配置目录"
-        }
-        val temp = File(file.parentFile, "config-new.tmp")
-        val backup = File(file.parentFile, "config-backup.yaml")
-        try {
-            temp.writeText(content, Charsets.UTF_8)
-            require(temp.length() in 12..SubscriptionFormat.MAX_PROFILE_BYTES.toLong()) {
-                "配置格式或大小异常"
-            }
-            if (file.exists()) {
-                // Keep the previous known-good configuration for rollback.
-                if (backup.exists()) require(backup.delete()) { "无法替换旧备份" }
-                require(file.renameTo(backup)) { "无法备份旧配置" }
-            }
-            if (!temp.renameTo(file)) {
-                if (backup.exists()) backup.renameTo(file)
-                error("无法保存代理配置，已尝试恢复旧版本")
-            }
-        } finally {
-            temp.delete()
-        }
+        ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
     }
 
     fun restoreBackup(): Boolean = synchronized(PROFILE_LOCK) {
-        val file = profileFile
-        val backup = File(file.parentFile, "config-backup.yaml")
-        if (!backup.isFile) return@synchronized false
-        val staged = File(file.parentFile, "config-failed.tmp")
-        staged.delete()
-        if (file.exists() && !file.renameTo(staged)) return@synchronized false
-        val restored = backup.renameTo(file)
-        if (!restored) staged.renameTo(file) else staged.delete()
-        restored
+        ProfileFileStore(profileFile).restore()
     }
 
     private fun tokenize(v: String) = v.split(Regex("[,;\\s]+")).map(String::trim).filter(String::isNotBlank)
