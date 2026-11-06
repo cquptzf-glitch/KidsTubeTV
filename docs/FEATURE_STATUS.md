@@ -7,15 +7,15 @@
 | 模块 | 实现路径 | 静态检查 |
 | --- | --- | --- |
 | 沉浸式电视首页、自动隐藏侧栏、大封面 | `ui/MainActivity.kt`, `ui/TvHeroCard.kt`, `ui/TvGridMetrics.kt` | TV 网格计算单元测试 |
-| 儿童播放器、自动隐藏控制条、逐视频重新审核 | `ui/PlayerActivity.kt`, `data/AdmissionPolicy.kt` | AdmissionPolicy 单元测试；其余需增加纯逻辑测试 |
+| 儿童播放器、自动隐藏控制条、逐视频重新审核与继续观看 | `ui/PlayerActivity.kt`, `data/AdmissionPolicy.kt`, `data/WatchProgressPolicy.kt` | 准入和续播秒数边界测试；播放状态机仍需补充离线模拟 |
 | 频道链接/@handle 与分享视频链接导入 | `data/ChannelReference.kt`, `data/YouTubeVideoReference.kt`, `ui/SettingsActivity.kt` | URL 解析单元测试 |
 | Google TV OAuth、父母审核后导入订阅 | `data/GoogleTvAuth.kt`, `ui/GoogleAccountActivity.kt` | 手工流程待静态模拟服务测试 |
 | 白名单撤销、批准视频删除 | `data/ApprovedPickerPolicy.kt` | 选择器集合策略单元测试 |
 | Mihomo 代理、配置导入/更新/备份回滚 | `proxy/KidsVpnService.kt`, `data/SettingsStore.kt` | YAML、订阅互斥与格式测试 |
 | 节点切换和选择记忆 | `proxy/MihomoControl.kt`, `data/ProxySelectionPolicy.kt` | 节点选择策略与响应解析单元测试 |
-| VPN 断线提示及会话隔离 | `proxy/ProxyNetworkHealth.kt`, `proxy/ProbeSessionGate.kt` | VPN 探测会话回归测试 |
+| VPN 断线提示、后台停机与会话隔离 | `proxy/KidsVpnService.kt`, `proxy/VpnSessionGate.kt`, `proxy/ProbeSessionGate.kt` | 两种会话状态机及探测回归测试 |
 | 子频道混排、搜索 ID 短时缓存 | `data/HomeFeedMixer.kt`, `data/SearchIdCache.kt` | 混排与缓存单元测试 |
-| 家长高级设置与脱敏诊断 | `ui/SettingsActivity.kt`, `ui/DiagnosticsActivity.kt` | Lint 与 Kotlin 编译 |
+| 家长 PIN 超时/后台锁定与脱敏诊断 | `data/ParentUnlockTicket.kt`, `KidsApp.kt`, `ui/*Activity.kt` | PIN idle 超时与后台锁定逻辑测试，Lint、编译 |
 
 ## 未完成的实际开发工作（优先级）
 
@@ -49,3 +49,13 @@
 - 完整频道访问：隐藏菜单「我的频道」，支持全部批准频道，标题从本地缓存获取，播放仍执行准入审核。
 - 应用层数据请求门控：Google/YouTube API 在 VPN 未准备好或探测已确认不可达时拒绝请求；不会声称这能替代 OS 级的 VPN 安全保证。
 - FlClash 官方源码构建：`official-flclash-core.yml`、`build-official-flclash-core.sh`、[构建说明](FLCLASH_CORE_BUILD.md)。当前默认构建**仍使用旧封装**，官方实验性工作流未证明成功，不应将其记为已迁移。
+
+
+## 2026-11-06 最新一轮开发
+
+- **VPN**：后台停止操作改用 `stopService`，不再创建一个新的后台 Service 传递 STOP；新增可测试的 `VpnSessionGate` 防旧初始化回调产生新 TUN。
+- **核心适配**：`NativeTunCallbacks` 变为 KidsTubeTV 自己定义的接口，`CurrentMihomoAarCore` 负责转换到旧版 `TunInterface`。旧 JNI 的保护回调仍然只返回 Unit，**尚不具备官方 FlClash 的完整 Boolean protect 语义**。
+- **最近观看进度**：`WatchHistory` 本地记录最多 50 条最近视频的续播点，每 12 秒更新；播放结束和清空历史时删除相应进度。每次进入播放页仍重新审核是否允许观看。
+- **家长权限**：解锁后连续无操作约 2 分钟自动到期，切出应用立即失效；家长界面按键再次校验，第一次设置 PIN 不能通过返回键跳过。
+- **限制**：上述完成项是 Kotlin 功能与静态检查，不代表 Android TV 真机的 Native TUN、系统限制行为和视频 IFrame 已验收。
+

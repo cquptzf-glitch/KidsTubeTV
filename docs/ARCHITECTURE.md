@@ -59,3 +59,12 @@ KidsApp (all-Activity background tracking, 6s grace)
 ## 许可
 
 原创工程 GPL-3.0-only。libmihomo-android 及其依赖遵循各自许可证。BabyTube 未提供开放许可，未复制其源码。
+
+
+## 近期实现：VPN 生命周期、续播、家长安全
+
+- `VpnSessionGate` 由一个递增会话序号确认是否允许异步 Core setup 回调建立 TUN；晚到的回调只被丢弃。**核心内部的异步初始化仍需将来在 FlClash 适配时处理**。
+- `KidsVpnService.stop(context)` 使用 `stopService()`，避免从后台启动新的 Service 只为停止 VPN。实际异常退出与路由隔离仍需最终设备验证。
+- `NativeTunCallbacks` 是可替换接口；老版 JNI 的 `protectSocket(Boolean)` 由 Service 检查，失败会结束 VPN，但旧版桥接仍无法把 Boolean 原样返回 Go。
+- `WatchProgressPolicy` 校验续播点，`WatchHistory` 限制数据条目并维护本地秒数，`PlayerActivity` 按间隔保存并在重新打开最近视频时续播。
+- `ParentUnlockTicket` 使用 `SystemClock.elapsedRealtime()` 而不是可手调的系统时间；连续 120 秒未交互后失效；`KidsApp` 所有活动后台化时立即调用 `ParentSession.lock()`。
