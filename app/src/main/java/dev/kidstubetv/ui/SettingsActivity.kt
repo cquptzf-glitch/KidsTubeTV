@@ -2,253 +2,451 @@ package dev.kidstubetv.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
-import android.widget.*
-import dev.kidstubetv.data.*
-import dev.kidstubetv.proxy.*
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.TextView
+import dev.kidstubetv.data.GoogleTvAuth
+import dev.kidstubetv.data.ParentSession
+import dev.kidstubetv.data.SettingsStore
+import dev.kidstubetv.data.SubscriptionClient
+import dev.kidstubetv.data.SubscriptionFormat
+import dev.kidstubetv.data.WatchHistory
+import dev.kidstubetv.data.WatchTime
+import dev.kidstubetv.proxy.KidsVpnService
+import dev.kidstubetv.proxy.ProxyNetworkHealth
+import dev.kidstubetv.proxy.ProxyStatus
 import java.io.ByteArrayOutputStream
+import java.net.URI
 import java.text.DateFormat
 import java.util.Date
 
-/** Parent-only settings; subscription tokens and API key are encrypted by Android Keystore. */
+/**
+ * Parent-only three-section TV hub.
+ *
+ * Most settings are one-tap actions; no full-screen editable form. Sensitive
+ * subscription URLs are only shown while explicitly editing behind PIN.
+ */
 class SettingsActivity : Activity() {
     private val store by lazy { SettingsStore(this) }
-    private lateinit var api: EditText
-    private lateinit var channels: EditText
-    private lateinit var allowed: EditText
-    private lateinit var blocked: EditText
-    private lateinit var subscription: EditText
-    private lateinit var searchSwitch: Switch
-    private lateinit var limitSpinner: Spinner
-    private lateinit var refreshSpinner: Spinner
-    private lateinit var message: TextView
+    private lateinit var scroller: ScrollView
+    private lateinit var content: LinearLayout
+    private lateinit var summary: TextView
+    private lateinit var networkState: TextView
+    private lateinit var networkDetail: TextView
+    private lateinit var childSummary: TextView
+    private lateinit var accountSummary: TextView
+    private lateinit var networkAdvanced: LinearLayout
+    private val sections = mutableListOf<LinearLayout>()
+    private val tabs = mutableListOf<Button>()
+    private var selectedSection = 0
+
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (::networkState.isInitialized) refreshSummaries()
+        }
+    }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         if (store.hasPin && !ParentSession.authorized()) { finish(); return }
-        val screen = ScrollView(this)
-        val body = TvUi.column(this)
-        screen.addView(body)
-        setContentView(screen)
-        body.addView(TvUi.label(this, "家长控制 / 代理设置", 28f, true))
-        body.addView(TvUi.label(this, "只有批准频道或视频且满足儿童及嵌入条件的内容可以播放。", 17f))
-        TvUi.space(body, this)
+        scroller = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
+        content = TvUi.column(this)
+        scroller.addView(content)
+        setContentView(scroller)
+        content.addView(TvUi.label(this, "家长中心", 30f, true))
+        content.addView(TvUi.label(this, "孩子只需选视频，所有复杂设置都留在这里。", 16f))
+        TvUi.space(content, this, 14)
 
-        // Remote-friendly parent hub: three large categories; hide all input-heavy
-        // settings unless the parent explicitly navigates into that section.
-        val childPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val networkPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val accountPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val categories = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val panels = listOf(childPanel, networkPanel, accountPanel)
-        val categoryButtons = mutableListOf<android.widget.Button>()
-        fun selectPanel(index: Int) {
-            panels.forEachIndexed { i, panel -> panel.visibility = if (i == index) android.view.View.VISIBLE else android.view.View.GONE }
-            categoryButtons.forEachIndexed { i, button ->
-                button.alpha = if (i == index) 1f else 0.68f
-            }
-            screen.post { screen.smoothScrollTo(0, 0) }
+        val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("✦ 儿童内容", "◈ 网络代理", "◉ YouTube 账号").forEachIndexed { index, label ->
+            val button = TvUi.button(this, label) { showSection(index) }
+            tabs.add(button)
+            nav.addView(button, LinearLayout.LayoutParams(0, TvUi.dp(this, 64), 1f).apply {
+                rightMargin = TvUi.dp(this@SettingsActivity, 12)
+            })
         }
-        listOf("✦  儿童内容", "◈  网络代理", "◉  YouTube 账号")
-            .forEachIndexed { index, title ->
-                val button = TvUi.button(this, title) { selectPanel(index) }
-                categoryButtons.add(button)
-                categories.addView(button, LinearLayout.LayoutParams(0, TvUi.dp(this, 58), 1f).apply {
-                    rightMargin = TvUi.dp(this@SettingsActivity, 10)
-                })
+        content.addView(nav)
+        TvUi.space(content, this, 9)
+        summary = TvUi.label(this, "", 15f).apply { setTextColor(TvUi.muted) }
+        content.addView(summary)
+        TvUi.space(content, this, 11)
+
+        repeat(3) {
+            val panel = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = View.GONE
             }
-        body.addView(categories)
-        TvUi.space(body, this, 10)
-        message = TvUi.label(this, stateText(), 15f).apply { setTextColor(TvUi.muted) }
-        body.addView(message)
-        TvUi.space(body, this, 10)
-        body.addView(childPanel)
-        body.addView(networkPanel)
-        body.addView(accountPanel)
-        selectPanel(0)
-        networkPanel.addView(TvUi.label(this, "Clash / Mihomo 订阅地址（HTTPS YAML）", 18f, true))
-        subscription = TvUi.input(this, "https://.../subscription?token=...", store.subscriptionUrl)
-        networkPanel.addView(subscription)
-        networkPanel.addView(TvUi.button(this, "保存订阅地址并立即更新") { saveSubscriptionAndFetch() })
-        TvUi.space(networkPanel, this)
-        networkPanel.addView(TvUi.label(this, "自动更新周期", 17f))
-        refreshSpinner = spinner(body, listOf("关闭", "每 6 小时", "每 24 小时", "每 72 小时", "每 7 天"),
-            listOf(0,6,24,72,168).indexOf(store.subscriptionIntervalHours).coerceAtLeast(0))
-        networkPanel.addView(TvUi.button(this, "从 U 盘导入完整 Mihomo YAML") {
-            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-            }, REQUEST_PROFILE)
+            sections.add(panel)
+            content.addView(panel)
+        }
+        buildChildSection(sections[0])
+        buildNetworkSection(sections[1])
+        buildAccountSection(sections[2])
+        content.addView(TvUi.button(this, "返回儿童首页") { finish() })
+        showSection(intent.getIntExtra(EXTRA_SECTION, 0).coerceIn(0, 2))
+        refreshSummaries()
+        if (!store.hasPin) setPinDialog(initial = true)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(ProxyStatus.ACTION_CHANGED).apply {
+            addAction(ProxyNetworkHealth.ACTION_CHANGED)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(statusReceiver, filter)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::summary.isInitialized) refreshSummaries()
+    }
+
+    override fun onStop() {
+        unregisterReceiver(statusReceiver)
+        super.onStop()
+    }
+
+    private fun showSection(index: Int) {
+        selectedSection = index
+        sections.forEachIndexed { i, panel -> panel.visibility = if (i == index) View.VISIBLE else View.GONE }
+        tabs.forEachIndexed { i, button -> button.alpha = if (i == index) 1f else 0.67f }
+        scroller.post { scroller.smoothScrollTo(0, 0) }
+    }
+
+    private fun heading(panel: LinearLayout, title: String, hint: String) {
+        panel.addView(TvUi.label(this, title, 24f, true))
+        panel.addView(TvUi.label(this, hint, 16f).apply { setTextColor(TvUi.muted) })
+        TvUi.space(panel, this, 15)
+    }
+
+    private fun buildChildSection(panel: LinearLayout) {
+        heading(panel, "儿童内容", "大封面浏览，只显示家长批准且经过儿童标记检查的视频。")
+        childSummary = TvUi.label(this, "", 18f)
+        panel.addView(childSummary)
+        TvUi.space(panel, this, 10)
+        panel.addView(TvUi.primaryButton(this, "管理允许的频道") {
+            editLines("批准频道 ID（每行一个 UC...）", store.channelsText) { store.channelsText = it }
         })
-        networkPanel.addView(TvUi.button(this, "节点选择 / 延迟测试 / 流量") {
-            startActivity(Intent(this, ProxyActivity::class.java))
-        })
-        TvUi.space(networkPanel, this)
-        accountPanel.addView(TvUi.button(this, "Google / YouTube 账号（可选登录）") {
-            startActivity(Intent(this, GoogleAccountActivity::class.java))
-        })
-        accountPanel.addView(TvUi.label(this,
-            "登录需 Google Cloud 的 TV OAuth 客户端；仅用于导入家长订阅频道，不会自动批准。", 15f))
-        TvUi.space(accountPanel, this)
-        childPanel.addView(TvUi.label(this, "YouTube Data API v3 Key", 18f, true))
-        api = TvUi.input(this, "Google Cloud API Key", store.apiKey)
-        api.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        childPanel.addView(api)
-        childPanel.addView(TvUi.label(this, "批准的频道 ID，每行一个 UC...", 18f))
-        channels = TvUi.input(this, "UCxxxxxxxxxxxxxxxxxxxxxx", store.channelsText, true)
-        childPanel.addView(channels)
-        childPanel.addView(TvUi.label(this, "额外批准的视频 ID（每行一个）", 18f))
-        allowed = TvUi.input(this, "11 位视频 ID", store.allowedVideosText, true)
-        childPanel.addView(allowed)
-        childPanel.addView(TvUi.label(this, "禁止的视频 ID（禁止优先）", 18f))
-        blocked = TvUi.input(this, "11 位视频 ID", store.blockedVideosText, true)
-        childPanel.addView(blocked)
-        searchSwitch = Switch(this).apply {
-            text = "允许儿童搜索（仍只显示白名单）"
-            setTextColor(-1)
-            textSize = 17f
+        panel.addView(TvUi.button(this, "设置每日观看时长") { pickDailyLimit() })
+        val searchControl = Switch(this).apply {
+            text = "允许搜索（结果仍受白名单限制）"
+            textSize = 18f
+            setTextColor(TvUi.text)
             isChecked = store.searchAllowed
+            setOnCheckedChangeListener { _, enabled ->
+                store.searchAllowed = enabled
+                refreshSummaries()
+            }
         }
-        childPanel.addView(searchSwitch)
-        childPanel.addView(TvUi.label(this, "每日观看时间", 17f))
-        val limits = listOf(15,20,30,45,60,90,120)
-        limitSpinner = spinner(body, limits.map { "$it 分钟" },
-            limits.indexOf(store.dailyLimitMinutes).coerceAtLeast(0))
-        TvUi.space(childPanel, this)
-        childPanel.addView(TvUi.button(this, "保存所有设置") { saveFields() })
-        childPanel.addView(TvUi.button(this, "设置 / 修改家长 PIN") { pinDialog(false) })
-        childPanel.addView(TvUi.button(this, "清空本地历史与收藏") {
-            AlertDialog.Builder(this).setMessage("确定删除所有本地历史和收藏？")
+        panel.addView(searchControl)
+        TvUi.space(panel, this, 10)
+        panel.addView(TvUi.button(this, "设置 YouTube API Key（可选）") {
+            editValue("YouTube Data API v3 Key", store.apiKey, secret = true) {
+                store.apiKey = it.trim()
+            }
+        })
+        panel.addView(TvUi.button(this, "精确允许的视频 ID") {
+            editLines("允许的视频 ID（每行 11 位）", store.allowedVideosText) {
+                store.allowedVideosText = it
+            }
+        })
+        panel.addView(TvUi.button(this, "禁止的视频 ID") {
+            editLines("禁止的视频 ID（每行 11 位）", store.blockedVideosText) {
+                store.blockedVideosText = it
+            }
+        })
+        panel.addView(TvUi.button(this, "修改家长 PIN") { setPinDialog(initial = false) })
+        panel.addView(TvUi.button(this, "清除观看历史和收藏") {
+            AlertDialog.Builder(this)
+                .setMessage("要清空本机的观看记录和收藏吗？")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("清空") { _, _ ->
+                .setPositiveButton("确认清除") { _, _ ->
                     WatchHistory(this).clear()
-                    message.text = "已清空"
+                    summary.text = "观看历史与收藏已清除"
                 }.show()
         })
-        childPanel.addView(TvUi.button(this, "返回首页") { finish() })
-        if (!store.hasPin) pinDialog(true)
+        TvUi.space(panel, this, 12)
     }
 
-    private fun spinner(body: LinearLayout, values: List<String>, selected: Int): Spinner =
-        Spinner(this).apply {
-            adapter = ArrayAdapter(this@SettingsActivity,
-                android.R.layout.simple_spinner_dropdown_item, values)
-            setSelection(selected.coerceIn(0, values.lastIndex))
-            body.addView(this, LinearLayout.LayoutParams(-1, TvUi.dp(this@SettingsActivity, 50)))
-        }
+    private fun buildNetworkSection(panel: LinearLayout) {
+        heading(panel, "网络代理", "启动 KidsTubeTV 自动连接，离开后自动断开；无需孩子操作。")
+        networkState = TvUi.label(this, "", 25f, true)
+        networkDetail = TvUi.label(this, "", 16f).apply { setTextColor(TvUi.muted) }
+        panel.addView(networkState)
+        panel.addView(networkDetail)
+        TvUi.space(panel, this, 18)
 
-    private fun saveFields(): Boolean {
-        return runCatching {
-            store.apiKey = api.text.toString()
-            store.channelsText = channels.text.toString()
-            store.allowedVideosText = allowed.text.toString()
-            store.blockedVideosText = blocked.text.toString()
-            store.searchAllowed = searchSwitch.isChecked
-            store.dailyLimitMinutes = listOf(15,20,30,45,60,90,120)[limitSpinner.selectedItemPosition]
-            store.subscriptionIntervalHours = listOf(0,6,24,72,168)[refreshSpinner.selectedItemPosition]
-            store.subscriptionUrl = subscription.text.toString()
-        }.fold({
-            message.text = if (store.ready) "设置已保存，可返回首页连接" else
-                "已保存，仍需完整配置 API Key / PIN / 白名单 / 代理文件"
-            true
-        }, {
-            message.text = "保存失败：" + (it.message ?: "")
-            false
+        // Only two main actions; token entry appears in one dialog, not on every visit.
+        panel.addView(TvUi.primaryButton(this, "＋ 添加 / 更换 Clash 订阅") {
+            editSubscription()
         })
-    }
+        TvUi.space(panel, this, 7)
+        panel.addView(TvUi.button(this, "◈  选择代理节点") {
+            startActivity(Intent(this, ProxyActivity::class.java))
+        })
+        TvUi.space(panel, this, 18)
 
-    private fun stateText(): String {
-        val timestamp = store.subscriptionUpdatedAt
-        val date = if (timestamp == 0L) "从未" else DateFormat.getDateTimeInstance().format(Date(timestamp))
-        return (if (store.hasProfile) "代理配置已导入" else "没有代理配置") + " · 最近更新：" + date
-    }
-
-    private fun saveSubscriptionAndFetch() {
-        val url = runCatching { SubscriptionFormat.normalizeUrl(subscription.text.toString()) }
-            .getOrElse { message.text = "URL 无效：" + it.message; return }
-        if (!saveFields()) return
-        if (ProxyStatus.phase != ProxyStatus.Phase.OFF) {
-            message.text = "正在关闭 VPN 以更新订阅…"
-            KidsVpnService.stop(this)
-            Handler(Looper.getMainLooper()).postDelayed({ fetch(url) }, 1000)
-        } else fetch(url)
-    }
-
-    private fun fetch(url: String) {
-        if (ProxyStatus.phase != ProxyStatus.Phase.OFF) {
-            message.text = "VPN 尚未关闭，请再试一次"
-            return
+        val toggle = TvUi.button(this, "高级设置  ▾") {
+            networkAdvanced.visibility =
+                if (networkAdvanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
-        message.text = "正在下载订阅…"
+        panel.addView(toggle)
+        networkAdvanced = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        panel.addView(networkAdvanced)
+        networkAdvanced.addView(TvUi.button(this, "立即更新当前订阅") {
+            if (store.subscriptionUrl.isBlank()) {
+                editSubscription()
+            } else {
+                downloadSubscription(store.subscriptionUrl)
+            }
+        })
+        networkAdvanced.addView(TvUi.button(this, "从 U 盘导入 Clash YAML") { importYaml() })
+        networkAdvanced.addView(TvUi.button(this, "订阅自动更新周期") { chooseRefreshInterval() })
+        networkAdvanced.addView(TvUi.button(this, "关闭当前 VPN") {
+            KidsVpnService.stop(this)
+            networkState.text = "正在断开连接…"
+        })
+        TvUi.space(networkAdvanced, this, 12)
+    }
+
+    private fun buildAccountSection(panel: LinearLayout) {
+        heading(panel, "YouTube 账号", "Google 登录不是必需的；只有家长批准的频道会展示。")
+        accountSummary = TvUi.label(this, "", 18f)
+        panel.addView(accountSummary)
+        TvUi.space(panel, this, 12)
+        panel.addView(TvUi.primaryButton(this, "Google 账号授权 / 导入订阅") {
+            startActivity(Intent(this, GoogleAccountActivity::class.java))
+        })
+        panel.addView(TvUi.label(this,
+            "Google 验证码可在手机上完成，不需要使用电视遥控器输入账号密码。", 15f)
+            .apply { setTextColor(TvUi.muted) })
+    }
+
+    private fun refreshSummaries() {
+        summary.text = "儿童频道：" + store.allowedChannels.size + "   ·   今日已看 " +
+            (WatchTime(this).elapsedSeconds() / 60) + " 分钟"
+        childSummary.text = "当前批准 " + store.allowedChannels.size + " 个频道  ·  每日 " +
+            store.dailyLimitMinutes + " 分钟"
+        val state = when (ProxyStatus.phase) {
+            ProxyStatus.Phase.OFF -> "○ 未连接"
+            ProxyStatus.Phase.STARTING -> "◌ 正在连接…"
+            ProxyStatus.Phase.ERROR -> "⚠ 连接异常"
+            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+                "⚠ 已连接，但网络不可达" else "● 已连接"
+        }
+        networkState.text = state
+        networkState.setTextColor(if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+            ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) TvUi.mint else TvUi.warm)
+        val host = runCatching { URI(store.subscriptionUrl).host }.getOrNull()
+        val source = when {
+            store.hasProfile && host != null -> "订阅来源：" + host
+            store.hasProfile -> "已导入本地 Clash 配置"
+            else -> "未配置代理；先添加 Clash 订阅或从 U 盘导入"
+        }
+        val time = if (store.subscriptionUpdatedAt > 0) {
+            " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
+        } else ""
+        networkDetail.text = source + time
+        accountSummary.text = if (GoogleTvAuth(this).isLinked) "Google 已授权（只读 YouTube 资料）"
+            else "未登录 Google；也可使用 YouTube API Key 浏览"
+    }
+
+    private fun editSubscription() {
+        editValue(
+            "Clash / Mihomo 订阅地址",
+            store.subscriptionUrl,
+            hint = "https://example.com/subscription?token=...",
+        ) { input ->
+            val url = SubscriptionFormat.normalizeUrl(input)
+            store.subscriptionUrl = url
+            downloadSubscription(url)
+        }
+    }
+
+    private fun downloadSubscription(url: String) {
+        // Do not stop the current VPN *before* downloading. Some subscription
+        // hosts are accessible only while the existing VPN is active.
+        networkState.text = "◌ 正在更新订阅…"
         Thread({
             val result = runCatching {
-                val content = SubscriptionClient().fetch(url)
-                store.writeProfile(content)
+                val yaml = SubscriptionClient().fetch(url)
+                store.writeProfile(yaml)
                 store.subscriptionUpdatedAt = System.currentTimeMillis()
             }
             runOnUiThread {
-                if (!isFinishing) message.text = result.fold(
-                    { "订阅更新成功；返回首页后使用新配置" },
-                    { "订阅失败，保留旧配置：" + (it.message ?: "连接失败") }
-                )
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                refreshSummaries()
+                result.onSuccess {
+                    networkState.text = "✓ 订阅已更新"
+                    networkDetail.text = "配置将在下次 VPN 连接时生效；当前播放不会中断。"
+                }.onFailure {
+                    networkState.text = "⚠ 订阅更新失败"
+                    networkDetail.text = "旧配置仍保留 · " + (it.message ?: "网络错误")
+                }
             }
-        }, "subscription-manual").start()
+        }, "kids-subscription-manual").start()
     }
 
-    @Deprecated("Storage Access Framework callback for Android 9")
+    private fun editLines(title: String, current: String, save: (String) -> Unit) {
+        editValue(title, current, multiline = true, save = save)
+    }
+
+    private fun editValue(
+        title: String,
+        current: String,
+        secret: Boolean = false,
+        multiline: Boolean = false,
+        hint: String = "请输入内容",
+        save: (String) -> Unit,
+    ) {
+        val editor = EditText(this).apply {
+            setText(current)
+            this.hint = hint
+            setTextColor(TvUi.text)
+            setHintTextColor(TvUi.muted)
+            setPadding(TvUi.dp(this@SettingsActivity, 20), TvUi.dp(this@SettingsActivity, 15),
+                TvUi.dp(this@SettingsActivity, 20), TvUi.dp(this@SettingsActivity, 15))
+            inputType = when {
+                multiline -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                secret -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            }
+            if (multiline) {
+                minLines = 4
+                maxLines = 8
+            } else setSingleLine(true)
+        }
+        val dialog = AlertDialog.Builder(this).setTitle(title).setView(editor)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                runCatching { save(editor.text.toString().trim()) }
+                    .onSuccess {
+                        dialog.dismiss()
+                        refreshSummaries()
+                    }.onFailure {
+                        editor.error = it.message ?: "保存失败"
+                    }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun pickDailyLimit() {
+        val minutes = intArrayOf(15, 20, 30, 45, 60, 90, 120)
+        AlertDialog.Builder(this).setTitle("每天可以看多久？")
+            .setSingleChoiceItems(minutes.map { "$it 分钟" }.toTypedArray(),
+                minutes.indexOf(store.dailyLimitMinutes).coerceAtLeast(0)) { dialog, position ->
+                store.dailyLimitMinutes = minutes[position]
+                refreshSummaries()
+                dialog.dismiss()
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun chooseRefreshInterval() {
+        val hours = intArrayOf(0, 6, 24, 72, 168)
+        val labels = arrayOf("不自动更新", "每 6 小时", "每天一次（推荐）", "每 3 天", "每 7 天")
+        AlertDialog.Builder(this).setTitle("Clash 订阅更新")
+            .setSingleChoiceItems(labels, hours.indexOf(store.subscriptionIntervalHours).coerceAtLeast(0)) {
+                    dialog, index ->
+                store.subscriptionIntervalHours = hours[index]
+                dialog.dismiss()
+                networkDetail.text = "自动更新周期已保存，下次连接时检查订阅。"
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun importYaml() {
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }, REQUEST_YAML)
+    }
+
+    @Deprecated("Legacy storage document picker callback for Android TV 9")
     override fun onActivityResult(request: Int, code: Int, data: Intent?) {
         super.onActivityResult(request, code, data)
-        if (request != REQUEST_PROFILE || code != RESULT_OK) return
-        if (ProxyStatus.phase != ProxyStatus.Phase.OFF) {
-            message.text = "请先在节点管理中断开 VPN 后导入"
-            return
-        }
+        if (request != REQUEST_YAML || code != RESULT_OK) return
         val uri = data?.data ?: return
+        networkState.text = "◌ 正在导入…"
         Thread({
             val result = runCatching {
-                contentResolver.openInputStream(uri).use { input ->
-                    requireNotNull(input) { "无法读取文件" }
+                contentResolver.openInputStream(uri).use { stream ->
+                    requireNotNull(stream) { "无法读取配置文件" }
                     val output = ByteArrayOutputStream()
                     val buffer = ByteArray(8192)
                     while (true) {
-                        val n = input.read(buffer)
+                        val n = stream.read(buffer)
                         if (n == -1) break
-                        require(output.size() + n <= SubscriptionFormat.MAX_PROFILE_BYTES) { "文件太大" }
+                        require(output.size() + n <= SubscriptionFormat.MAX_PROFILE_BYTES) {
+                            "配置文件超过 1 MB"
+                        }
                         output.write(buffer, 0, n)
                     }
                     store.writeProfile(output.toString(Charsets.UTF_8.name()))
                 }
                 store.subscriptionUpdatedAt = System.currentTimeMillis()
             }
-            runOnUiThread { message.text = result.fold(
-                { "导入成功；返回首页可连接" },
-                { "导入失败：" + (it.message ?: "未知错误") }
-            ) }
-        }, "yaml-import").start()
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                refreshSummaries()
+                result.onSuccess {
+                    networkState.text = "✓ 本地配置已导入"
+                    networkDetail.text = "下次启动 VPN 时生效"
+                }.onFailure {
+                    networkState.text = "⚠ 导入失败"
+                    networkDetail.text = it.message ?: "无法读取文件"
+                }
+            }
+        }, "kids-yaml-import").start()
     }
 
-    private fun pinDialog(firstRun: Boolean) {
-        val input = EditText(this).apply {
-            hint = "4～12 位数字"
+    private fun setPinDialog(initial: Boolean) {
+        val editor = EditText(this).apply {
+            hint = "请输入 4～12 位数字"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle(if (firstRun) "首次设置家长 PIN" else "更换家长 PIN")
-            .setView(input).setPositiveButton("保存", null)
-            .setNegativeButton("取消") { _, _ -> if (firstRun) finish() }
+            .setTitle(if (initial) "设置家长 PIN" else "修改家长 PIN")
+            .setView(editor)
+            .setPositiveButton("保存", null)
+            .setNegativeButton("取消") { _, _ -> if (initial) finish() }
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                runCatching { store.setPin(input.text.toString()) }
-                    .onSuccess { ParentSession.unlock(); message.text = "PIN 已保存"; dialog.dismiss() }
-                    .onFailure { input.error = it.message }
+                runCatching { store.setPin(editor.text.toString()) }
+                    .onSuccess {
+                        ParentSession.unlock()
+                        dialog.dismiss()
+                        refreshSummaries()
+                    }.onFailure { editor.error = it.message }
             }
         }
         dialog.show()
     }
-    companion object { private const val REQUEST_PROFILE = 918 }
+
+    companion object {
+        const val EXTRA_SECTION = "open_section"
+        private const val REQUEST_YAML = 918
+    }
 }
