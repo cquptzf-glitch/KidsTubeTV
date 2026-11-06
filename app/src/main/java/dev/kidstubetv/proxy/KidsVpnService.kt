@@ -12,26 +12,22 @@ import android.os.Handler
 import android.os.Looper
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.ui.MainActivity
-import io.github.oviron.libmihomo.TunInterface
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Android user-consented VPN. Only this package is routed into TUN; the rest of the
  * TV keeps its normal connection. No root, private API, or global VPN changes.
  */
 class KidsVpnService : VpnService() {
-    // Android VpnService.protect(fd): Boolean conflicts with TunInterface.protect(fd): Unit.
-    // Bridge them through a dedicated callback object, never direct inheritance.
-    private val tunCallbacks = object : TunInterface {
-        override fun protect(fd: Int) {
-            this@KidsVpnService.protect(fd)
+    private val sessions = VpnSessionGate()
+    private fun tunCallbacks(sessionId: Long) = object : NativeTunCallbacks {
+        override fun protectSocket(fd: Int): Boolean {
+            val success = this@KidsVpnService.protect(fd)
+            if (!success) main.post { fail("VPN socket protection failed", sessionId) }
+            return success
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
     }
     private val core: NativeProxyCore = CurrentMihomoAarCore()
-    private val active = AtomicBoolean(false)
-    private val sessionGeneration = AtomicInteger(0)
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
     private var failed = false
@@ -39,18 +35,25 @@ class KidsVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopNow()
-            ACTION_START -> if (active.compareAndSet(false, true)) {
-                failed = false
-                ProxyNetworkHealth.reset(this)
-                ensureForeground()
-                ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "Initializing Mihomo")
-                startCoreAsync(sessionGeneration.incrementAndGet())
+            ACTION_START -> {
+                val sessionId = sessions.start()
+                if (sessionId != null) {
+                    failed = false
+                    ProxyNetworkHealth.reset(this)
+                    try {
+                        ensureForeground()
+                        ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "Initializing Mihomo")
+                        startCoreAsync(sessionId)
+                    } catch (_: Throwable) {
+                        fail("Unable to start foreground VPN", sessionId)
+                    }
+                }
             }
         }
         return Service.START_NOT_STICKY
     }
 
-    private fun startCoreAsync(sessionId: Int) {
+    private fun startCoreAsync(sessionId: Long) {
         Thread({
             try {
                 val store = SettingsStore(applicationContext)
@@ -77,10 +80,10 @@ class KidsVpnService : VpnService() {
         }, "kidstubetv-mihomo-init").start()
     }
 
-    private fun isCurrent(sessionId: Int): Boolean =
-        active.get() && sessionGeneration.get() == sessionId
+    private fun isCurrent(sessionId: Long): Boolean =
+        sessions.current(sessionId)
 
-    private fun establishTun(sessionId: Int) {
+    private fun establishTun(sessionId: Long) {
         if (!isCurrent(sessionId)) return
         try {
             val builder = Builder()
@@ -94,7 +97,7 @@ class KidsVpnService : VpnService() {
             val pfd = builder.establish() ?: error("System refused to establish VPN")
             // Ownership of this FD transfers to Mihomo, which closes it in stopTun().
             val fd = pfd.detachFd()
-            core.startTun(fd, tunCallbacks)
+            core.startTun(fd, tunCallbacks(sessionId))
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
             ProxyNetworkHealth.check(applicationContext)
@@ -121,7 +124,7 @@ class KidsVpnService : VpnService() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    private fun fail(message: String, sessionId: Int) {
+    private fun fail(message: String, sessionId: Long) {
         if (!isCurrent(sessionId)) return
         failed = true
         ProxyStatus.update(this, ProxyStatus.Phase.ERROR, message)
@@ -129,8 +132,7 @@ class KidsVpnService : VpnService() {
     }
 
     private fun stopNow() {
-        sessionGeneration.incrementAndGet()
-        if (!active.getAndSet(false)) {
+        if (!sessions.stop()) {
             stopSelf()
             return
         }
@@ -172,7 +174,9 @@ class KidsVpnService : VpnService() {
         }
 
         fun stop(context: android.content.Context) {
-            context.startService(Intent(context, KidsVpnService::class.java).setAction(ACTION_STOP))
+            // stopService is permitted while our Activity is backgrounded and
+            // does not create another foreground Service to deliver STOP.
+            context.stopService(Intent(context, KidsVpnService::class.java))
         }
     }
 }

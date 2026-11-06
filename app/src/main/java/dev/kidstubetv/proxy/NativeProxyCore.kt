@@ -2,7 +2,6 @@ package dev.kidstubetv.proxy
 
 import io.github.oviron.libmihomo.Clash
 import io.github.oviron.libmihomo.InvokeInterface
-import io.github.oviron.libmihomo.TunInterface
 import org.json.JSONObject
 
 /**
@@ -15,7 +14,7 @@ import org.json.JSONObject
  */
 internal interface NativeProxyCore {
     fun setup(nativeLibraryDirectory: String, configDirectory: String, sdk: Int, selected: Map<String, String>, done: (String?) -> Unit)
-    fun startTun(fd: Int, callbacks: TunInterface)
+    fun startTun(fd: Int, callbacks: NativeTunCallbacks)
     fun stopTun()
 }
 
@@ -29,8 +28,18 @@ internal class CurrentMihomoAarCore : NativeProxyCore {
         Clash.quickSetup(init, options, done)
     }
 
-    override fun startTun(fd: Int, callbacks: TunInterface) {
-        Clash.startTUN(fd, callbacks, "kidstubetv", "system", "172.19.0.2/30", "1.1.1.1", 1400)
+    override fun startTun(fd: Int, callbacks: NativeTunCallbacks) {
+        // The legacy bridge cannot return the protect() Boolean to Go;
+        // the owning service stops the VPN if protection fails.
+        val bridge = object : io.github.oviron.libmihomo.TunInterface {
+            override fun protect(fd: Int) {
+                callbacks.protectSocket(fd)
+            }
+            override fun resolverProcess(
+                protocol: Int, source: String, target: String, uid: Int
+            ): String = callbacks.resolverProcess(protocol, source, target, uid)
+        }
+        Clash.startTUN(fd, bridge, "kidstubetv", "system", "172.19.0.2/30", "1.1.1.1", 1400)
     }
 
     override fun stopTun() {
