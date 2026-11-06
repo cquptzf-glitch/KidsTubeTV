@@ -21,7 +21,7 @@
 
 ### P0：代理核心与安全边界
 
-- 当前仍是第三方 `oviron/libmihomo-android`，**尚未替换成** FlClash 官方后端。已新增固定 v0.9.3 的实验性 Go/gomobile 源码构建流水线（仅手动触发，**尚未执行确认产物**），下一步要完成 `Core.startTun()` 返回值、`protect(fd)` 成功标志、配置参数和节点管理 API 的 adapter，并完成官方后端静态构建。
+- 当前仍是第三方 `oviron/libmihomo-android`，**尚未替换成** FlClash 官方后端。已实现 v0.9.3 的独立 Go/gomobile adapter 和 CI，并已成功源码编译 AAR（含 ARM32/ARM64）；官方后端 APK 静态编译仍需独立流水线通过，默认后端尚未切换。
 - 对 VPN 建立/异常/强制停止和系统回收完善边界处理，避免仅因 TUN 已建立就报告 YouTube 一定可用；应用层阻止离线数据请求不能取代系统级防泄漏保证。
 - 为核心初始化、自动更新与停机的异步交叉增加可注入的状态机和单元测试。已有会话序号处理旧回调，但不能等同于完整的原生网络停机保证。
 
@@ -43,19 +43,29 @@
 
 ## 2026-11-06 最近合入
 
-- 已选代理节点恢复：`ProxySelectionPolicy`、`SettingsStore.selectedProxyNodes`、`CurrentMihomoAarCore.setup`。切换成功后持久化；更换订阅或导入本地 YAML 时清理旧选择。
+- 已选代理节点恢复：`ProxySelectionPolicy`、`SettingsStore.selectedProxyNodes`、`LegacyMihomoCore.setup`。切换成功后持久化；更换订阅或导入本地 YAML 时清理旧选择。
 - VPN 启停/探测回调隔离：`KidsVpnService.sessionGeneration`、`ProbeSessionGate` 及回归测试。
 - 父母撤销与收藏控制：Google 订阅取消勾选可撤销、已批准单视频列表可删。
 - 完整频道访问：隐藏菜单「我的频道」，支持全部批准频道，标题从本地缓存获取，播放仍执行准入审核。
 - 应用层数据请求门控：Google/YouTube API 在 VPN 未准备好或探测已确认不可达时拒绝请求；不会声称这能替代 OS 级的 VPN 安全保证。
-- FlClash 官方源码构建：`official-flclash-core.yml`、`build-official-flclash-core.sh`、[构建说明](FLCLASH_CORE_BUILD.md)。当前默认构建**仍使用旧封装**，官方实验性工作流未证明成功，不应将其记为已迁移。
+- FlClash 官方源码构建：`official-flclash-core.yml`、`build-official-flclash-core.sh`、[构建说明](FLCLASH_CORE_BUILD.md)。当前默认构建**仍使用旧封装**，官方 AAR 已构建成功，但尚未完成官方 APK 编译，不能视为默认后端已迁移。
 
 
 ## 2026-11-06 最新一轮开发
 
 - **VPN**：后台停止操作改用 `stopService`，不再创建一个新的后台 Service 传递 STOP；新增可测试的 `VpnSessionGate` 防旧初始化回调产生新 TUN。
-- **核心适配**：`NativeTunCallbacks` 变为 KidsTubeTV 自己定义的接口，`CurrentMihomoAarCore` 负责转换到旧版 `TunInterface`。旧 JNI 的保护回调仍然只返回 Unit，**尚不具备官方 FlClash 的完整 Boolean protect 语义**。
+- **核心适配**：`NativeTunCallbacks` 变为 KidsTubeTV 自己定义的接口，`LegacyMihomoCore` 负责转换到旧版 `TunInterface`。旧 JNI 的保护回调仍然只返回 Unit，**尚不具备官方 FlClash 的完整 Boolean protect 语义**。
 - **最近观看进度**：`WatchHistory` 本地记录最多 50 条最近视频的续播点，每 12 秒更新；播放结束和清空历史时删除相应进度。每次进入播放页仍重新审核是否允许观看。
 - **家长权限**：解锁后连续无操作约 2 分钟自动到期，切出应用立即失效；家长界面按键再次校验，第一次设置 PIN 不能通过返回键跳过。
 - **限制**：上述完成项是 Kotlin 功能与静态检查，不代表 Android TV 真机的 Native TUN、系统限制行为和视频 IFrame 已验收。
 
+
+## 本轮继续开发（2026-11-07）
+
+- 双后端源码隔离：`app/src/legacy/java` 与 `app/src/official/java`；`-PkidsTubeOfficialCore=true` 选择官方 FlClash Go SDK；默认旧后端继续通过 CI。
+- 官方 Go v0.9.3 AAR 已源码构建成功，包含 `classes.jar`、ARMv7/ARM64 `libgojni.so`；官方 APK 的 Lint、单测和编译需以独立 Actions 实际结果为准。
+- `OfficialCoreProtocol` 对官方 Go `result/error` 协议及节点选择异常进行测试。
+- `ProfileFileStore` 采用临时 YAML、备份与替换策略，配置文件级回滚有 JVM 单测。
+- 家长在订阅页可使用剪贴板中的合法 HTTPS 链接直接导入，界面只显示域名而不显示 token。
+- VPN 部分原生启动失败后也尝试 `stopTun()` 清理；不将 TUN 建立成功等同于 YouTube 可访问。
+- 仍未完成：官方 APK 代码和 CI 的最终静态验收、手机安全配对、完整网络隔离检查及稳定发布版本。遵循当前要求，不进行真机验证。
