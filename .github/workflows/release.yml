@@ -1,0 +1,64 @@
+name: Signed release
+on:
+  push:
+    tags:
+      - "v*"
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Install Android SDK 36
+        run: |
+          M="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$M" --licenses >/dev/null || true
+          "$M" --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Fetch pinned Mihomo bridge
+        run: bash scripts/fetch-mihomo.sh
+      - name: Load Android signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KIDSTUBE_KEYSTORE_BASE64 }}
+          KIDSTUBE_STORE_PASSWORD: ${{ secrets.KIDSTUBE_STORE_PASSWORD }}
+          KIDSTUBE_KEY_ALIAS: ${{ secrets.KIDSTUBE_KEY_ALIAS }}
+          KIDSTUBE_KEY_PASSWORD: ${{ secrets.KIDSTUBE_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing KIDSTUBE_KEYSTORE_BASE64"; exit 1; }
+          test -n "$KIDSTUBE_STORE_PASSWORD" || { echo "::error::Missing KIDSTUBE_STORE_PASSWORD"; exit 1; }
+          test -n "$KIDSTUBE_KEY_ALIAS" || { echo "::error::Missing KIDSTUBE_KEY_ALIAS"; exit 1; }
+          test -n "$KIDSTUBE_KEY_PASSWORD" || { echo "::error::Missing KIDSTUBE_KEY_PASSWORD"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kidstubetv-signing.jks"
+          echo "KIDSTUBE_KEYSTORE_FILE=$RUNNER_TEMP/kidstubetv-signing.jks" >> "$GITHUB_ENV"
+          echo "KIDSTUBE_STORE_PASSWORD=$KIDSTUBE_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KIDSTUBE_KEY_ALIAS=$KIDSTUBE_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KIDSTUBE_KEY_PASSWORD=$KIDSTUBE_KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Run tests and build signed APK
+        env:
+          KIDSTUBE_VERSION_NAME: ${{ github.ref_name }}
+          KIDSTUBE_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/KidsTubeTV-${GITHUB_REF_NAME}-android9.apk"
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KidsTubeTV-signed-release
+          path: dist/*
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
