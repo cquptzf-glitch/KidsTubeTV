@@ -362,10 +362,12 @@ class MainActivity : Activity() {
         TvUi.space(list, this, 8)
 
         val gap = TvUi.dp(this, 18)
-        val horizontalSpace = resources.displayMetrics.widthPixels - TvUi.dp(this, 88)
-        val columns = if ((horizontalSpace - 2 * gap) / 3 < TvUi.dp(this, 205)) 2 else 3
-        val cardWidth = ((horizontalSpace - (columns - 1) * gap) / columns)
-            .coerceAtLeast(TvUi.dp(this, 150))
+        val metrics = TvGridMetrics.calculate(
+            resources.displayMetrics.widthPixels, TvUi.dp(this, 88),
+            gap, TvUi.dp(this, 205)
+        )
+        val columns = metrics.columns
+        val cardWidth = metrics.cardWidth
         val grid = GridLayout(this).apply {
             columnCount = columns
             clipChildren = false
