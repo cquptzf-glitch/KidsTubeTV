@@ -16,6 +16,8 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.Abs
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import dev.kidstubetv.data.SettingsStore
+import dev.kidstubetv.data.WatchHistory
+import dev.kidstubetv.data.WatchTime
 import dev.kidstubetv.data.YouTubeRepository
 import dev.kidstubetv.proxy.ProxyStatus
 
@@ -34,6 +36,29 @@ class PlayerActivity : Activity() {
     private var seconds = 0f
     private var playing = false
     private var next: Runnable? = null
+    private val history by lazy { WatchHistory(this) }
+    private val time by lazy { WatchTime(this) }
+    private val settings by lazy { SettingsStore(this) }
+    private lateinit var favoriteButton: android.widget.Button
+    private var lastRecordedId: String? = null
+    private val watchTicker = object : Runnable {
+        override fun run() {
+            if (playing) {
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                    playing = false
+                    player?.pause()
+                    if (::label.isInitialized) label.text = "代理已断开，已暂停播放"
+                } else if (time.addSecond() >= settings.dailyLimitMinutes * 60) {
+                    player?.pause()
+                    playing = false
+                    if (::label.isInitialized) label.text = "今天的观看时间已达到上限，请明天再看"
+                    main.postDelayed({ if (!isFinishing) finish() }, 1500)
+                    return
+                }
+            }
+            main.postDelayed(this, 1000)
+        }
+    }
     private lateinit var videoView: YouTubePlayerView
     private lateinit var label: TextView
 
@@ -61,6 +86,8 @@ class PlayerActivity : Activity() {
         controls.addView(TvUi.button(this, "上一集") { loadAt(index - 1) })
         controls.addView(TvUi.button(this, "暂停/继续") { togglePause() })
         controls.addView(TvUi.button(this, "下一集") { loadAt(index + 1) })
+        favoriteButton = TvUi.button(this, "☆ 收藏") { toggleFavorite() }
+        controls.addView(favoriteButton)
         controls.addView(TvUi.button(this, "返回") { finish() })
         label = TvUi.label(this, "校验视频中…", 16f)
         controls.addView(label, LinearLayout.LayoutParams(0, -2, 1f))
@@ -74,6 +101,13 @@ class PlayerActivity : Activity() {
             }
             override fun onStateChange(youTubePlayer: YouTubePlayer, state: PlayerConstants.PlayerState) {
                 playing = state == PlayerConstants.PlayerState.PLAYING
+                if (playing) {
+                    val id = allowedId
+                    if (id != null && id != lastRecordedId) {
+                        history.record(id)
+                        lastRecordedId = id
+                    }
+                }
                 if (state == PlayerConstants.PlayerState.ENDED) scheduleNext()
             }
             override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
@@ -84,6 +118,7 @@ class PlayerActivity : Activity() {
             }
         }, IFramePlayerOptions.Builder(this).controls(0).rel(0).ivLoadPolicy(3).build())
         loadAt(index)
+        main.postDelayed(watchTicker, 1000)
     }
 
     private fun loadAt(newIndex: Int) {
@@ -93,6 +128,11 @@ class PlayerActivity : Activity() {
         }
         next?.let(main::removeCallbacks)
         next = null
+        if (time.remaining(settings.dailyLimitMinutes) <= 0) {
+            label.text = "今天观看时间已满"
+            player?.pause()
+            return
+        }
         if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             label.text = "VPN 未就绪：禁止视频直连"
             player?.pause()
@@ -120,6 +160,9 @@ class PlayerActivity : Activity() {
                 } else {
                     allowedId = item.id
                     label.text = item.title + " · " + item.channelTitle
+                    if (::favoriteButton.isInitialized) {
+                        favoriteButton.text = if (history.isFavorite(item.id)) "★ 已收藏" else "☆ 收藏"
+                    }
                     if (ready) player?.loadVideo(item.id, 0f)
                 }
             }
@@ -136,6 +179,12 @@ class PlayerActivity : Activity() {
         val action = Runnable { next = null; loadAt(index + 1) }
         next = action
         main.postDelayed(action, 5_000)
+    }
+
+    private fun toggleFavorite() {
+        val id = allowedId ?: return
+        val selected = history.toggleFavorite(id)
+        favoriteButton.text = if (selected) "★ 已收藏" else "☆ 收藏"
     }
 
     private fun togglePause() {
@@ -160,11 +209,13 @@ class PlayerActivity : Activity() {
     }
 
     override fun onStop() {
+        playing = false
         player?.pause()
         super.onStop()
     }
 
     override fun onDestroy() {
+        main.removeCallbacks(watchTicker)
         next?.let(main::removeCallbacks)
         if (::videoView.isInitialized) videoView.release()
         super.onDestroy()
