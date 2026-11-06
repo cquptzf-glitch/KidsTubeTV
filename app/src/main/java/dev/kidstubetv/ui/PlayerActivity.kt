@@ -27,6 +27,7 @@ import dev.kidstubetv.data.WatchHistory
 import dev.kidstubetv.data.WatchTime
 import dev.kidstubetv.data.YouTubeRepository
 import dev.kidstubetv.proxy.ProxyStatus
+import dev.kidstubetv.proxy.ProxyNetworkHealth
 
 /**
  * Remote-first fullscreen YouTube IFrame player.
@@ -51,6 +52,7 @@ class PlayerActivity : Activity() {
     private var lastRecordedVideo: String? = null
     private var autoNext: Runnable? = null
     private var controlsVisible = false
+    private var healthPulseSeconds = 0
 
     private lateinit var videoView: YouTubePlayerView
     private lateinit var controls: LinearLayout
@@ -62,8 +64,12 @@ class PlayerActivity : Activity() {
     private val hideControls = Runnable { setControlsVisible(false) }
     private val playbackTick = object : Runnable {
         override fun run() {
+            healthPulseSeconds++
+            if (healthPulseSeconds % 25 == 1 && ProxyStatus.phase == ProxyStatus.Phase.READY)
+                ProxyNetworkHealth.check(this@PlayerActivity)
             if (playing) {
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
                     pauseOnVpnLost()
                 } else if (clock.addSecond() >= settings.dailyLimitMinutes * 60) {
                     playing = false
@@ -172,7 +178,9 @@ class PlayerActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter(ProxyStatus.ACTION_CHANGED)
+        val filter = IntentFilter(ProxyStatus.ACTION_CHANGED).apply {
+            addAction(ProxyNetworkHealth.ACTION_CHANGED)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(vpnReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -216,7 +224,8 @@ class PlayerActivity : Activity() {
             videoTitle.text = "今天的观看时间已经用完啦"
             return
         }
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
             pauseOnVpnLost()
             return
         }
@@ -278,7 +287,10 @@ class PlayerActivity : Activity() {
     }
 
     private fun togglePlayback() {
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY) { pauseOnVpnLost(); return }
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+            pauseOnVpnLost(); return
+        }
         if (clock.remaining(settings.dailyLimitMinutes) <= 0) { player?.pause(); return }
         player?.let { if (playing) it.pause() else it.play() }
     }
@@ -294,13 +306,17 @@ class PlayerActivity : Activity() {
 
     private fun renderVpnStatus() {
         if (!::proxyWarning.isInitialized) return
-        if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+        val healthFailed = ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY && !healthFailed) {
             proxyWarning.visibility = View.GONE
         } else {
-            proxyWarning.text = "⚠ VPN 未连接，播放已停止 · 按确定返回首页重新连接"
+            proxyWarning.text = if (healthFailed)
+                "⚠ VPN 隧道已启动，但 Google 网络无法访问 · 按确定返回检查"
+                else "⚠ VPN 未连接，播放已停止 · 按确定返回首页重新连接"
             proxyWarning.visibility = View.VISIBLE
             playing = false
             player?.pause()
+            cancelNext()
         }
     }
 
