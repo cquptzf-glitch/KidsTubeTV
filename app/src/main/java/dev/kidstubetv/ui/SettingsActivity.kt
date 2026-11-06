@@ -517,9 +517,10 @@ class SettingsActivity : Activity() {
 
     private fun manuallyEditSubscription() {
         editValue(
-            "Clash / Mihomo 订阅地址",
-            store.subscriptionUrl,
-            hint = "https://example.com/subscription?token=...",
+            "输入新的 Clash 订阅地址",
+            "",
+            secret = true,
+            hint = "粘贴 HTTPS 订阅链接（不会显示密钥）",
         ) { input ->
             val url = SubscriptionFormat.normalizeUrl(input)
             downloadSubscription(url, saveNewUrl = true)
