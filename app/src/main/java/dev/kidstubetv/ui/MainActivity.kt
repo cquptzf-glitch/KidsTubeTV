@@ -57,12 +57,22 @@ class MainActivity : Activity() {
     private var loadedAfterConnection = false
     private var consentPending = false
     private var consentDeclined = false
+    private val recoveryPolicy = VpnRecoveryPolicy()
+    private var recoveryScheduled = false
+    private val recoverVpn = Runnable {
+        recoveryScheduled = false
+        if (isFinishing || isDestroyed || consentDeclined || !settings.proxyReady) return@Runnable
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
+            ProxyStatus.phase == ProxyStatus.Phase.STARTING) return@Runnable
+        requestVpn()
+    }
     private val hideDrawerLater = Runnable { if (::drawer.isInitialized) hideDrawer() }
     private val networkPulse = object : Runnable {
         override fun run() {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
                 ProxyNetworkHealth.check(this@MainActivity)
             }
+            evaluateVpnRecovery()
             mainHandler.postDelayed(this, 25_000)
         }
     }
@@ -70,7 +80,11 @@ class MainActivity : Activity() {
     private val proxyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateVpnChrome()
-            if (ProxyStatus.phase == ProxyStatus.Phase.READY) loadDefaultOnce()
+            evaluateVpnRecovery()
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
+                loadDefaultOnce()
+            }
         }
     }
 
@@ -115,14 +129,26 @@ class MainActivity : Activity() {
             showPlaceholder()
         }
         updateVpnChrome()
-        if (settings.proxyReady && !consentPending && !consentDeclined &&
-            ProxyStatus.phase == ProxyStatus.Phase.OFF) requestVpn()
-        if (ProxyStatus.phase == ProxyStatus.Phase.READY) loadDefaultOnce()
+        if (ProxyStatus.phase == ProxyStatus.Phase.ERROR ||
+            (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)) {
+            evaluateVpnRecovery()
+        } else if (settings.proxyReady && !consentPending && !consentDeclined &&
+            ProxyStatus.phase == ProxyStatus.Phase.OFF && !recoveryScheduled &&
+            !recoveryPolicy.exhausted) {
+            requestVpn()
+        }
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+            ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
+            loadDefaultOnce()
+        }
     }
 
     override fun onStop() {
         unregisterReceiver(proxyReceiver)
         mainHandler.removeCallbacks(networkPulse)
+        mainHandler.removeCallbacks(recoverVpn)
+        recoveryScheduled = false
         nextRequest++
         catalogTask?.cancel(true)
         catalogTask = null
@@ -193,8 +219,15 @@ class MainActivity : Activity() {
             background = warningShape()
             setOnClickListener {
                 consentDeclined = false
-                if (ProxyStatus.phase == ProxyStatus.Phase.READY) ProxyNetworkHealth.check(this@MainActivity)
-                else requestVpn()
+                recoveryPolicy.onManualRetry()
+                mainHandler.removeCallbacks(recoverVpn)
+                recoveryScheduled = false
+                if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+                    KidsVpnService.stop(this@MainActivity)
+                    mainHandler.postDelayed(recoverVpn, 1_200)
+                    recoveryScheduled = true
+                } else requestVpn()
             }
             visibility = View.GONE
         }
@@ -437,6 +470,27 @@ class MainActivity : Activity() {
         })
     }
 
+    private fun evaluateVpnRecovery() {
+        if (isFinishing || isDestroyed || consentDeclined || consentPending ||
+            !settings.proxyReady || recoveryScheduled) return
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.ONLINE) {
+            recoveryPolicy.onHealthy()
+            return
+        }
+        val failed = ProxyStatus.phase == ProxyStatus.Phase.ERROR ||
+            (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+        if (!failed) return
+        val delay = recoveryPolicy.nextDelay() ?: return
+        recoveryScheduled = true
+        // A dead tunnel must be stopped before a new VpnService can establish
+        // the next TUN. Never change to direct networking as a fallback.
+        KidsVpnService.stop(this)
+        mainHandler.postDelayed(recoverVpn, delay)
+        updateVpnChrome()
+    }
+
     private fun updateVpnChrome() {
         if (!::status.isInitialized) return
         status.text = when (ProxyStatus.phase) {
@@ -448,10 +502,13 @@ class MainActivity : Activity() {
         status.setTextColor(if (ProxyStatus.phase == ProxyStatus.Phase.READY)
             TvUi.mint else TvUi.muted)
         val error = when (ProxyStatus.phase) {
-            ProxyStatus.Phase.ERROR -> "⚠ VPN 连接异常 · 按确定重试"
+            ProxyStatus.Phase.ERROR -> if (recoveryScheduled)
+                "⚠ VPN 异常 · 正在自动重新连接" else
+                "⚠ VPN 异常 · 按确定重试"
             ProxyStatus.Phase.OFF -> if (settings.proxyReady) "⚠ 网络已断开 · 按确定重新连接" else null
             ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
-                "⚠ VPN 已建立，但无法访问 Google · 按确定检测网络" else null
+                (if (recoveryScheduled) "⚠ Google 不可达 · 自动重连中"
+                    else "⚠ 无法访问 Google · 按确定重新连接") else null
             else -> null
         }
         errorBar.text = error.orEmpty()
@@ -577,6 +634,8 @@ class MainActivity : Activity() {
             loadDefault(force = true)
             return
         }
+        mainHandler.removeCallbacks(recoverVpn)
+        recoveryScheduled = false
         KidsVpnService.stop(this)
         super.onBackPressed()
     }
@@ -584,6 +643,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideDrawerLater)
         mainHandler.removeCallbacks(networkPulse)
+        mainHandler.removeCallbacks(recoverVpn)
         catalogTask?.cancel(true)
         catalogExecutor.shutdownNow()
         super.onDestroy()
