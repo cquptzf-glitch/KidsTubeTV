@@ -1,6 +1,6 @@
 # KidsTubeTV
 
-为 Android TV（最低 **Android 9 / API 28**）开发的遥控器儿童视频应用，内置 Mihomo (Clash Meta) 应用专属 VPN。
+为 Android TV（最低 **Android 9 / API 28**）开发的遥控器儿童视频应用，内置 Mihomo (Clash Meta) 应用专属 VPN，支持官方 FlClash Go 和旧版 JNI 两套后端。
 
 [![Android TV build](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml/badge.svg)](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml)
 
@@ -8,15 +8,15 @@
 
 ## 已实现的主要功能
 
-- **沉浸式 Android TV UI：** 全幅主推荐背景、大封面自适应视频卡片、无常驻侧栏（左键唤出，闲置自动隐藏）、遥控器焦点高亮；播放器控制栏自动隐藏，支持上一集、下一集、暂停、快进/后退及最近观看自动续播
+- **沉浸式 Android TV UI：** 全幅主推荐背景、大封面自适应视频卡片、无常驻侧栏（左键唤出，闲置自动隐藏）、遥控器焦点高亮；播放器控制栏自动隐藏，支持上一集、下一集、暂停、快进/后退及最近观看自动续播；家长可关闭自动连播，后台回调不得自动开始播放
 - **儿童保护：** 频道 ID 白名单、单视频白名单、禁止列表；YouTube Data API `madeForKids`、`embeddable` 检查，播放前再次复核
 - **家长设置：** PIN（PBKDF2-SHA256 + 连续错误暂时锁定），2 分钟无操作超时与应用切后台锁定、儿童搜索开关、15–120 分钟每日观看限制、历史/收藏清除
 - **极简 Clash 设置：** 默认只显示连接状态和「添加/更换订阅」「选择节点」两项；支持剪贴板 HTTPS 订阅一键导入（隐藏 token），也可在弹窗输入 URL；U 盘导入、自动更新周期、测速、流量统计等隐藏在高级功能。支持 HTTPS Clash/Mihomo YAML 和配置备份，更新配置在下次连接时生效
 - **节点管理：** Mihomo Selector 代理组选节点、当前节点延迟测试、流量查询；节点选择可在下次启动时恢复
-- **应用专属 VPN：** 无需 Root；首次弹系统授权，打开应用后自动启用 VPN，显式退出立刻断开，Home 键退后台约 6 秒断开，不接管其他应用路由
-- **Google 登录（可选）：** 官方 TV OAuth 设备码授权，通过手机登录，读取登录账户的 YouTube 订阅；**只有家长勾选的频道**才加入白名单
+- **应用专属 VPN：** 无需 Root；首次弹系统授权，打开应用后自动启用 VPN，显式退出立刻断开，Home 键退后台约 6 秒断开，不接管其他应用路由；网络持续异常自动退避重连（最多 3 次），家长手动断开不触发自动重连
+- **Google 登录（可选）：** 官方 TV OAuth 设备码授权，通过电视二维码在手机上登录，读取登录账户的 YouTube 订阅；**只有家长勾选的频道**才加入白名单
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
-- **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时使用仓库 Secrets 构建签名 APK、生成 SHA256SUMS 并发布 GitHub Release
+- **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建采用官方 FlClash 核心的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
 ## 最近完善（2026-11-06）
 
@@ -70,3 +70,10 @@
 **开发说明：** 已添加[官方 FlClash Core 独立编译与 APK 静态验证流水线](docs/FLCLASH_CORE_BUILD.md)，但常规 APK 仍使用原 Mihomo 封装；开发阶段的静态验收状态详见[功能台账](docs/FEATURE_STATUS.md)。
 
 **官方核心独立 APK：** [FlClash 官方 Go 后端构建成功的 Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/runs/42256808333) 已通过 Lint、单测与 APK 编译。默认 APK 仍用旧 Mihomo SDK；两个版本都未进行真实电视网络验收。
+
+## 用手机辅助配置（不暴露订阅密钥）
+
+- Clash 订阅：在手机复制 HTTPS 订阅链接，使用电视支持的手机遥控器/输入法将文本粘贴到 TV；家长设置中也可一键使用电视剪贴板的链接，界面只显示域名。若电视不支持跨设备剪贴板，可通过系统文件选择器导入 U 盘上的 Clash YAML。
+- Google 授权：家长中心打开 Google TV 登录，用手机扫码电视上的二维码并输入页面提供的设备验证码，无需在电视上输入 Google 密码。
+- 为保护可能含节点密码的订阅数据，本应用**没有开启未经验证的局域网 HTTP 订阅上传服务**。
+

@@ -63,3 +63,12 @@ CD 只负责构建和发布，不代表自动完成真实电视的全部功能�
 目前 `minSdk=28`、`targetSdk=32`，侧载目标是旧款 Android TV，不是 Google Play 上架版。CI 仅对 `ExpiredTargetSdkVersion` 做有说明的 Lint 例外，**其他 Lint 错误仍会阻断构建**。未来上架前需要升级 targetSDK，并审查 Android 新版前台服务、通知、VPN 权限行为。
 
 每次 GitHub Actions 使用临时 runner 生成的 Debug keystore 可能不同；**不同 CI 构建的 Debug APK 不一定能直接覆盖安装**。需长期保留数据并做稳定升级时，使用同一份自有签名密钥打包。不要把测试 Debug APK 当作生产签名版本分发。
+
+
+## 官方 FlClash 签名发布版本（2026-11-07）
+
+`release.yml` 现默认采用固定上游 FlClash v0.9.3 和 Mihomo 子模块 SHA 构建 Go AAR，使用 `-PkidsTubeOfficialCore=true` 编译 Release，执行 `lintRelease` 和 `testReleaseUnitTest`，调用 Android `apksigner verify --verbose` 检验签名。
+
+签名来源仍是仓库 Secrets：`KIDSTUBE_KEYSTORE_BASE64`、`KIDSTUBE_STORE_PASSWORD`、`KIDSTUBE_KEY_ALIAS`、`KIDSTUBE_KEY_PASSWORD`。**不要将密钥或 PIN 提交进仓库。** 由 `v*` 标签触发；缺失签名 Secrets 时直接失败，不发布未签名 APK。
+
+正式 Release 附上官方核心来源版本、FlClash LICENSE 和 APK SHA256 校验文件。默认 Debug 与 Release 可使用不同内核后端，但必须共用自有稳定 Android 签名才能覆盖升级；Actions 临时签名的 Debug APK 不保证能升级至 Release。

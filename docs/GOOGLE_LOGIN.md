@@ -27,3 +27,10 @@ Google 官方 TV OAuth 文档：<https://developers.google.com/identity/protocol
 - 登录请求及同步订阅需要网络访问 `oauth2.googleapis.com` 与 `www.googleapis.com`，先连接 App VPN。
 - Google OAuth 生产使用可能需要验证及平台配额审核；没有真机 Google 登录实测记录前，不宣称已经通过官方审核。
 - 家长设置使用 PIN 限制孩子导入订阅频道；APP 级 PIN **不能替代系统级家长控制**。
+
+
+## 手机扫码简化授权（2026-11-07）
+
+家长进入 Google 账号授权界面，电视显示 Google 官方设备验证 URL 的 QR 码及短验证码。用手机扫码打开 URL，**在手机上输入电视验证码**，再授权 YouTube 订阅的只读访问。二维码不包含 Google 访问令牌、刷新令牌、Clash 订阅密码或家长 PIN。
+
+取消授权或设备码过期后，后台返回的 OAuth 令牌不会写入本机。登录仍需用户自行提供 Google Cloud TV/limited-input OAuth 客户端凭据，尚不提供应用作者托管的 OAuth 服务。
