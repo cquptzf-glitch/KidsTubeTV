@@ -26,6 +26,27 @@ class YouTubeRepository(private val settings: SettingsStore) {
         return lookup(ids)
     }
 
+    /**
+     * Fetch uploads from an approved channel through channels.list + playlistItems.list;
+     * much cheaper than search.list and unlikely to return unrelated channels.
+     */
+    fun uploads(channelId: String): List<KidVideo> {
+        require(channelId in settings.allowedChannels) { "频道不在家长白名单" }
+        val channels = get("channels", mapOf("part" to "contentDetails", "id" to channelId))
+        val uploadsId = channels.optJSONArray("items")?.optJSONObject(0)
+            ?.optJSONObject("contentDetails")?.optJSONObject("relatedPlaylists")
+            ?.optString("uploads").orEmpty()
+        if (uploadsId.isBlank()) return emptyList()
+        val response = get("playlistItems", mapOf("part" to "contentDetails",
+            "playlistId" to uploadsId, "maxResults" to "40"))
+        val items = response.optJSONArray("items") ?: return emptyList()
+        val ids = (0 until items.length()).mapNotNull { idx ->
+            items.optJSONObject(idx)?.optJSONObject("contentDetails")?.optString("videoId")
+                ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+        }
+        return lookup(ids)
+    }
+
     /** 50 IDs per videos.list; avoids the 100-unit search quota for favorites/history. */
     fun lookup(videoIds: List<String>): List<KidVideo> {
         val validIds = videoIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
