@@ -10,13 +10,25 @@ android {
         applicationId = "dev.kidstubetv"
         minSdk = 28
         targetSdk = 32 // Sideload-first TV build; target SDK upgrades audited separately
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = System.getenv("KIDSTUBE_VERSION_CODE")?.toIntOrNull() ?: 2
+        versionName = System.getenv("KIDSTUBE_VERSION_NAME") ?: "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    signingConfigs {
+        val keystore = System.getenv("KIDSTUBE_KEYSTORE_FILE")
+        if (!keystore.isNullOrBlank()) {
+            create("production") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("KIDSTUBE_STORE_PASSWORD")
+                keyAlias = System.getenv("KIDSTUBE_KEY_ALIAS")
+                keyPassword = System.getenv("KIDSTUBE_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("production")?.let { signingConfig = it }
         }
     }
     compileOptions {
