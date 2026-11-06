@@ -77,6 +77,8 @@ class SettingsStore(context: Context) {
 
     val profileFile: File get() = File(dir, "mihomo/config.yaml")
     val hasProfile: Boolean get() = profileFile.isFile && profileFile.length() > 0
+    val hasBackupProfile: Boolean get() =
+        File(profileFile.parentFile, "config-backup.yaml").isFile
 
     /** VPN can start before YouTube OAuth is linked; content still stays locked. */
     val proxyReady: Boolean get() = hasProfile && hasPin

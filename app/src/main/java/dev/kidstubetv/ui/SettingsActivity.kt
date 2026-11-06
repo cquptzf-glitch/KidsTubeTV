@@ -225,6 +225,25 @@ class SettingsActivity : Activity() {
         networkAdvanced.addView(TvUi.button(this, "设备与网络诊断") {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         })
+        networkAdvanced.addView(TvUi.button(this, "恢复上一次 Clash 配置") {
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
+                ProxyStatus.phase == ProxyStatus.Phase.STARTING) {
+                networkDetail.text = "请先关闭 VPN，再恢复之前的配置"
+            } else if (!store.hasBackupProfile) {
+                networkDetail.text = "没有可以恢复的上一版配置"
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("恢复上一版 Clash 配置")
+                    .setMessage("将当前配置替换成之前备份的 YAML，之后需要重新连接 VPN。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("恢复") { _, _ ->
+                        val ok = store.restoreBackup()
+                        networkState.text = if (ok) "✓ 已恢复上一版代理配置" else "⚠ 恢复失败"
+                        networkDetail.text = if (ok) "返回首页重新连接 VPN 以生效"
+                            else "文件恢复失败，当前配置未主动删除"
+                    }.show()
+            }
+        })
         networkAdvanced.addView(TvUi.button(this, "关闭当前 VPN") {
             KidsVpnService.stop(this)
             networkState.text = "正在断开连接…"
