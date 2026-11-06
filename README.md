@@ -62,3 +62,7 @@
 ## 许可与来源
 
 本仓库原创部分采用 GPL-3.0-only。**并未复制 BabyTube 无开放许可证的源码**；参考过它的公开需求设计。Mihomo Android AAR 采用 GPL-3.0，分发时应满足 GPL 和其他第三方依赖许可。详情参阅 [LICENSE](LICENSE)。公开仓库里不要保存代理链接、API Key、OAuth 令牌、Google Client Secret 或签名密钥。
+
+## 功能闭环台账
+
+- [当前实现、未完成任务与静态验收](docs/FEATURE_STATUS.md)
