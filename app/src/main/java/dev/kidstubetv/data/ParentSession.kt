@@ -10,6 +10,7 @@ object ParentSession {
     fun onInteraction(): Boolean = ticket.onInteraction()
     fun allowExternalUi() = ticket.allowExternalUi()
     fun endExternalUi() = ticket.endExternalUi()
+    fun externalUiAuthorized(): Boolean = ticket.externalUiAuthorized()
     fun onBackground() = ticket.onBackground()
     fun lock() = ticket.lock()
 }

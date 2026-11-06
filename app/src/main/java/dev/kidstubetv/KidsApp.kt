@@ -12,8 +12,17 @@ import dev.kidstubetv.data.ParentSession
 class KidsApp : Application(), Application.ActivityLifecycleCallbacks {
     private val handler = Handler(Looper.getMainLooper())
     private var activeScreens = 0
-    private val disconnect = Runnable {
-        if (activeScreens == 0) KidsVpnService.stop(this)
+    private val disconnect = object : Runnable {
+        override fun run() {
+            if (activeScreens != 0) return
+            if (ParentSession.externalUiAuthorized()) {
+                // A system document picker is part of the parent's workflow.
+                // Retain the VPN only until the bounded PIN ticket expires.
+                handler.postDelayed(this, 6000)
+            } else {
+                KidsVpnService.stop(this@KidsApp)
+            }
+        }
     }
 
     override fun onCreate() {

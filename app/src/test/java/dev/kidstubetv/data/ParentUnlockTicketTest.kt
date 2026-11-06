@@ -25,8 +25,10 @@ class ParentUnlockTicketTest {
         ticket.allowExternalUi()
         ticket.onBackground()
         assertTrue(ticket.authorized())
+        assertTrue(ticket.externalUiAuthorized())
         clock = 301L
         assertFalse(ticket.authorized())
+        assertFalse(ticket.externalUiAuthorized())
         ticket.endExternalUi()
         ticket.onBackground()
         assertFalse(ticket.authorized())
@@ -37,6 +39,7 @@ class ParentUnlockTicketTest {
         ticket.unlock()
         ticket.onBackground()
         assertFalse(ticket.authorized())
+        assertFalse(ticket.externalUiAuthorized())
     }
 
     @Test fun backgroundLockInvalidatesEvenRecentlyUsedTicket() {

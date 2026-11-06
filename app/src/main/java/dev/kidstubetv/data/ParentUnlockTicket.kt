@@ -32,6 +32,10 @@ class ParentUnlockTicket(
         if (authorized()) externalUiUntil = expiresAt
     }
 
+    /** Bounded exception for a parent-invoked Android system picker only. */
+    @Synchronized fun externalUiAuthorized(): Boolean =
+        externalUiUntil != 0L && nowMs() < externalUiUntil && authorized()
+
     @Synchronized fun onBackground() {
         if (externalUiUntil == 0L || nowMs() >= externalUiUntil) lock()
     }
