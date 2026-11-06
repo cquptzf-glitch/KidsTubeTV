@@ -35,6 +35,8 @@ class GoogleTvAuth(context: Context) {
         set(v) { secret.put("oauth_client_secret", v.trim()) }
 
     val isLinked: Boolean get() = secret.get("oauth_refresh_token").isNotBlank()
+    /** Get an OAuth bearer for public YouTube API calls when no API key was configured. */
+    fun authorizedToken(): String = accessToken()
     val isConfigured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank()
 
     fun begin(): TvDeviceCode {

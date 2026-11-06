@@ -61,7 +61,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         showHome()
-        if (settings.ready && !permissionDeclined && !authorizationPending &&
+        if (settings.proxyReady && !permissionDeclined && !authorizationPending &&
             ProxyStatus.phase == ProxyStatus.Phase.OFF) requestVpn()
     }
 
@@ -141,7 +141,7 @@ class MainActivity : Activity() {
     }
 
     private fun requestVpn() {
-        if (!settings.ready) { showHome(); return }
+        if (!settings.proxyReady) { showHome(); return }
         if (authorizationPending || ProxyStatus.phase == ProxyStatus.Phase.STARTING ||
             ProxyStatus.phase == ProxyStatus.Phase.READY) return
         val request = VpnService.prepare(this)
@@ -181,6 +181,12 @@ class MainActivity : Activity() {
     }
 
     private fun loadVideos(title: String, load: () -> List<KidVideo>) {
+        if (!settings.ready) {
+            results.removeAllViews()
+            results.addView(TvUi.label(this,
+                "请先在家长设置中配置 API Key 或 Google 登录，并批准至少一个频道/视频。", 18f))
+            return
+        }
         if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             results.removeAllViews()
             results.addView(TvUi.label(this, "代理未就绪，已阻止直连访问 YouTube。", 18f))

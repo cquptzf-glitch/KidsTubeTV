@@ -9,6 +9,7 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 class SettingsStore(context: Context) {
+    private val appContext = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("kids_config_v1", Context.MODE_PRIVATE)
     private val secrets = SecurePrefs(context.applicationContext)
     private val dir = context.applicationContext.filesDir
@@ -72,8 +73,12 @@ class SettingsStore(context: Context) {
     val profileFile: File get() = File(dir, "mihomo/config.yaml")
     val hasProfile: Boolean get() = profileFile.isFile && profileFile.length() > 0
 
-    val ready: Boolean get() = apiKey.isNotBlank() &&
-        (allowedChannels.isNotEmpty() || approvedVideoIds.isNotEmpty()) && hasProfile && hasPin
+    /** VPN can start before YouTube OAuth is linked; content still stays locked. */
+    val proxyReady: Boolean get() = hasProfile && hasPin
+    val hasYouTubeAuth: Boolean get() = apiKey.isNotBlank() || GoogleTvAuth(appContext).isLinked
+    val ready: Boolean get() = proxyReady && hasYouTubeAuth &&
+        (allowedChannels.isNotEmpty() || approvedVideoIds.isNotEmpty())
+    fun oauthAccessToken(): String = GoogleTvAuth(appContext).authorizedToken()
 
     val hasPin: Boolean get() = prefs.contains("pin_hash") && prefs.contains("pin_salt")
     var pinLockedUntil: Long
