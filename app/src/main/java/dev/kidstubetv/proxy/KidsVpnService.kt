@@ -12,9 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.ui.MainActivity
-import io.github.oviron.libmihomo.Clash
 import io.github.oviron.libmihomo.TunInterface
-import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -30,6 +28,7 @@ class KidsVpnService : VpnService() {
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
     }
+    private val core: NativeProxyCore = CurrentMihomoAarCore()
     private val active = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
@@ -54,14 +53,8 @@ class KidsVpnService : VpnService() {
             try {
                 val profile = SettingsStore(this).profileFile
                 require(profile.isFile) { "Missing Mihomo profile. Import in Parent Settings." }
-                Clash.load(applicationInfo.nativeLibraryDir)
-                // The SDK requires the profile at <home-dir>/config.yaml, not an arbitrary path.
-                // Its init schema is {"home-dir": string, "version": Android SDK int}.
-                val init = JSONObject()
-                    .put("home-dir", profile.parentFile!!.absolutePath)
-                    .put("version", Build.VERSION.SDK_INT).toString()
-                val setup = JSONObject().put("selected-map", JSONObject()).toString()
-                Clash.quickSetup(init, setup) { error ->
+                core.setup(applicationInfo.nativeLibraryDir,
+                    profile.parentFile!!.absolutePath, Build.VERSION.SDK_INT) { error ->
                     main.post {
                         if (!active.get()) return@post
                         if (!error.isNullOrEmpty()) {
@@ -91,8 +84,7 @@ class KidsVpnService : VpnService() {
             val pfd = builder.establish() ?: error("System refused to establish VPN")
             // Ownership of this FD transfers to Mihomo, which closes it in stopTun().
             val fd = pfd.detachFd()
-            Clash.startTUN(fd, tunCallbacks, "kidstubetv", "system",
-                "172.19.0.2/30", "1.1.1.1", 1400)
+            core.startTun(fd, tunCallbacks)
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
             ProxyNetworkHealth.check(applicationContext)
@@ -132,9 +124,8 @@ class KidsVpnService : VpnService() {
             return
         }
         runCatching {
-            if (Clash.isLoaded() && tunStarted) Clash.stopTun()
+            if (tunStarted) core.stopTun()
             tunStarted = false
-            if (Clash.isLoaded()) Clash.setEventListener(null as io.github.oviron.libmihomo.InvokeInterface?)
         }
         if (!failed) ProxyStatus.update(this, ProxyStatus.Phase.OFF, "Disconnected")
         ProxyNetworkHealth.reset(this)
