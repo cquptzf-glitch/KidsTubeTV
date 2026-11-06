@@ -2,6 +2,8 @@ package dev.kidstubetv.data
 
 import android.net.Uri
 import org.json.JSONObject
+import dev.kidstubetv.proxy.ProxyStatus
+import dev.kidstubetv.proxy.ProxyNetworkHealth
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -143,6 +145,10 @@ class YouTubeRepository(private val settings: SettingsStore) {
     fun approveSingle(id: String): KidVideo? = lookup(listOf(id)).firstOrNull()
 
     private fun get(endpoint: String, params: Map<String, String>): JSONObject {
+        GoogleRequestPolicy.requireAvailable(
+            ProxyStatus.phase == ProxyStatus.Phase.READY,
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
+        )
         val key = settings.apiKey
         val token = if (key.isBlank()) settings.oauthAccessToken() else ""
         require(key.isNotBlank() || token.isNotBlank()) {

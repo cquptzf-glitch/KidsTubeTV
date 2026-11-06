@@ -2,6 +2,8 @@ package dev.kidstubetv.data
 
 import android.content.Context
 import org.json.JSONObject
+import dev.kidstubetv.proxy.ProxyStatus
+import dev.kidstubetv.proxy.ProxyNetworkHealth
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -147,6 +149,7 @@ class GoogleTvAuth(context: Context) {
     }
 
     private fun get(uri: String, token: String): Pair<Int, JSONObject> {
+        requireGoogleVpn()
         val conn = URL(uri).openConnection() as HttpURLConnection
         conn.connectTimeout = 12_000
         conn.readTimeout = 18_000
@@ -161,6 +164,7 @@ class GoogleTvAuth(context: Context) {
     }
 
     private fun post(endpoint: String, values: Map<String,String>): Pair<Int, JSONObject> {
+        requireGoogleVpn()
         val conn = URL(endpoint).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true
@@ -177,6 +181,11 @@ class GoogleTvAuth(context: Context) {
             return status to JSONObject(if (response.isNotBlank()) response else "{}")
         } finally { conn.disconnect() }
     }
+
+    private fun requireGoogleVpn() = GoogleRequestPolicy.requireAvailable(
+        ProxyStatus.phase == ProxyStatus.Phase.READY,
+        ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
+    )
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 }

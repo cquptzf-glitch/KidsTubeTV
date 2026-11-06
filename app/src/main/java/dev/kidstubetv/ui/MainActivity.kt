@@ -100,7 +100,7 @@ class MainActivity : Activity() {
         settings.channelsText,
         settings.allowedVideosText,
         settings.blockedVideosText,
-        settings.apiKey.isNotBlank().toString(),
+        settings.hasYouTubeAuth.toString(),
         settings.searchAllowed.toString(),
         settings.dailyLimitMinutes.toString()
     ).joinToString("|")
