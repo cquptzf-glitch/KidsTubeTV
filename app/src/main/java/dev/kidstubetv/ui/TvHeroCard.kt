@@ -27,7 +27,8 @@ object TvHeroCard {
             tag = "menu-edge"
             clipChildren = false
             clipToPadding = false
-            background = outline(activity, focused = false)
+            background = TvUi.rounded(activity, 0xFF1C3640.toInt(), 22)
+            foreground = focusRing(activity, focused = false)
             setOnClickListener { play() }
         }
         val picture = ImageView(activity).apply {
@@ -88,7 +89,7 @@ object TvHeroCard {
         ))
 
         root.setOnFocusChangeListener { _, focused ->
-            root.background = outline(activity, focused)
+            root.foreground = focusRing(activity, focused)
             root.scaleX = if (focused) 1.008f else 1f
             root.scaleY = if (focused) 1.008f else 1f
             action.setTextColor(if (focused) 0xFFFFF4D9.toInt() else TvUi.warm)
@@ -106,9 +107,9 @@ object TvHeroCard {
         return root
     }
 
-    private fun outline(activity: Activity, focused: Boolean) =
+    private fun focusRing(activity: Activity, focused: Boolean) =
         GradientDrawable().apply {
-            setColor(0xFF1C3640.toInt())
+            setColor(android.graphics.Color.TRANSPARENT)
             cornerRadius = TvUi.dp(activity, 22).toFloat()
             setStroke(
                 TvUi.dp(activity, if (focused) 4 else 1),
