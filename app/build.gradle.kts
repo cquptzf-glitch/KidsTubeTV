@@ -38,6 +38,12 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    // Sideload-first Android 9 TV build. This variant is not eligible for Google Play
+    // distribution until target-SDK migration, foreground-service review and TV testing.
+    // Keep every other lint check enabled and blocking in CI.
+    lint {
+        disable.add("ExpiredTargetSdkVersion")
+    }
     packaging {
         jniLibs.useLegacyPackaging = true // Clash.load(nativeLibraryDir) needs extracted .so files
     }
