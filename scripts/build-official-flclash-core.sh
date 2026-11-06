@@ -3,6 +3,10 @@
 # Isolated from the running KidsTubeTV backend until the native adapter is ready.
 set -euo pipefail
 FLCLASH_TAG="${FLCLASH_TAG:-v0.9.3}"
+# Freeze the upstream tag and its Mihomo submodule to the commits validated
+# by the official AAR build. A moved tag must never silently change binaries.
+EXPECTED_FLCLASH_SHA="be84736605527034689c95bf27828ff27d912c5e"
+EXPECTED_MIHOMO_SHA="024245dc72bc92f48237f865119afe0cd53ac9e6"
 NDK_VERSION="${NDK_VERSION:-28.2.13676358}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/kidstubetv-flclash-source"
@@ -18,6 +22,14 @@ git -C "$WORK" -c url.https://github.com/.insteadOf=git@github.com: \
   submodule update --init --recursive core/Clash.Meta
 GIT_SHA="$(git -C "$WORK" rev-parse HEAD)"
 MIHOMO_SHA="$(git -C "$WORK/core/Clash.Meta" rev-parse HEAD)"
+test "$GIT_SHA" = "$EXPECTED_FLCLASH_SHA" || {
+  echo "Refusing changed FlClash tag: $GIT_SHA" >&2
+  exit 1
+}
+test "$MIHOMO_SHA" = "$EXPECTED_MIHOMO_SHA" || {
+  echo "Refusing changed Clash.Meta submodule: $MIHOMO_SHA" >&2
+  exit 1
+}
 echo "FlClash source: $FLCLASH_TAG @ $GIT_SHA"
 echo "FlClash Mihomo submodule: $MIHOMO_SHA"
 SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
