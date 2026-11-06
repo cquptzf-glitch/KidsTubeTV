@@ -117,3 +117,21 @@ KidsTubeTV 当前引用的是 <https://github.com/oviron/libmihomo-android> 的 
 1. **已进行**：GitHub CI Kotlin 编译与纯单元测试（以对应最新 commit 的实际 Actions 状态为准）。
 2. **未进行**：用户雷鸟 TV 实机网络/播放验收，包括 Android 9 系统 WebView、Google OAuth、真实 Clash 订阅、多节点、IPv6/UDP、家长 PIN 可用性、遥控器焦点兼容、VPN 中断/后台退出。
 3. **未完成**：真实网络 fail-closed 保证、官方 FlClash 完整核心迁移、手机扫码/配对配置管理；这三项不可用 HTML Demo 或编译通过替代。
+
+
+## 八、极简电视 UI 和 Clash 配置已在 Kotlin 工程实现（2026-11-06）
+
+此轮代码已落到 Android 工程，并非仅 HTML 样式稿：
+
+- `ui/TvHeroCard.kt`：沉浸式全幅主推荐，整幅背景图片、渐变遮罩、文字与单一 OK 播放动作。暖黄色遥控器焦点描边绘制在前景层，不会被图片遮住。
+- `ui/MainActivity.kt`：推荐区按当前电视屏幕高度动态缩放；底部三列或窄屏两列视频封面；侧边菜单默认完全隐藏，遥控器左键或菜单键唤出，10 秒闲置自动消失，选择后立即隐藏；VPN 异常始终在底部显示。
+- `ui/TvGridMetrics.kt` 和 `TvGridMetricsTest.kt`：将列数与封面宽度计算抽为纯 Kotlin，并覆盖宽、中、窄屏测试。
+- `ui/SettingsActivity.kt`：家长中心「儿童内容」「网络代理」「YouTube 账号」三个区域；默认仅当前区域可见。Clash 入口默认仅显示网络状态、添加/更换订阅和选择节点；URL、U 盘导入、更新周期、关闭 VPN 等操作按需出现。
+- `ui/ProxyActivity.kt`：每个可手动切换的策略组一个大按钮，选择节点时用系统单选对话框。延迟/流量/手动断开隐藏在高级诊断。
+- 首次未导入配置时，进入家长设置直接定位到网络代理页。更换订阅时**先下载并备份配置，不主动断开已有 VPN**；新配置在下次连接生效。
+
+### 当前仍未实现或未验证
+
+- **不是**官方 FlClash Android 原生模块迁移；仍使用固定版本 `libmihomo-android` AAR。
+- 手机局域网安全配对和推送配置尚未开发；暂可利用电视系统支持的手机遥控器输入键盘或通过 U 盘导入。
+- CI 单元测试和 APK 编译不等于雷鸟 Android 9 真机通过。尚须验证主推荐焦点在电视系统上的可见性、WebView 视频、VPN/DNS/IPv6、订阅下载和线程/生命周期异常。
