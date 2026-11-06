@@ -47,7 +47,7 @@ class SettingsActivity : Activity() {
     /** Every remote action is gated by the recent parent PIN session. */
     override fun onUserInteraction() {
         super.onUserInteraction()
-        if (!ParentSession.onInteraction()) finish()
+        if (store.hasPin && !ParentSession.onInteraction()) finish()
     }
 
     private val store by lazy { SettingsStore(this) }
@@ -126,7 +126,7 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (!ParentSession.authorized()) {
+        if (store.hasPin && !ParentSession.authorized()) {
             finish()
             return
         }
