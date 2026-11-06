@@ -55,6 +55,12 @@ class SettingsActivity : Activity() {
             startActivity(Intent(this, ProxyActivity::class.java))
         })
         TvUi.space(body, this)
+        body.addView(TvUi.button(this, "Google / YouTube 账号（可选登录）") {
+            startActivity(Intent(this, GoogleAccountActivity::class.java))
+        })
+        body.addView(TvUi.label(this,
+            "登录需 Google Cloud 的 TV OAuth 客户端；仅用于导入家长订阅频道，不会自动批准。", 15f))
+        TvUi.space(body, this)
         body.addView(TvUi.label(this, "YouTube Data API v3 Key", 18f, true))
         api = TvUi.input(this, "Google Cloud API Key", store.apiKey)
         api.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
