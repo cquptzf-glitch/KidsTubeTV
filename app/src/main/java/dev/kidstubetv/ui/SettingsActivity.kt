@@ -402,10 +402,15 @@ class SettingsActivity : Activity() {
         super.onActivityResult(request, code, data)
         if (request != REQUEST_YAML || code != RESULT_OK) return
         val uri = data?.data ?: return
+        if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
+            networkState.text = "已有订阅更新正在运行，请稍后导入"
+            return
+        }
         networkState.text = "◌ 正在导入…"
         Thread({
-            val result = runCatching {
-                contentResolver.openInputStream(uri).use { stream ->
+            val result = try {
+                runCatching {
+                    contentResolver.openInputStream(uri).use { stream ->
                     requireNotNull(stream) { "无法读取配置文件" }
                     val output = ByteArrayOutputStream()
                     val buffer = ByteArray(8192)
@@ -417,9 +422,12 @@ class SettingsActivity : Activity() {
                         }
                         output.write(buffer, 0, n)
                     }
-                    store.writeProfile(output.toString(Charsets.UTF_8.name()))
+                        store.writeProfile(output.toString(Charsets.UTF_8.name()))
+                    }
+                    store.subscriptionUpdatedAt = System.currentTimeMillis()
                 }
-                store.subscriptionUpdatedAt = System.currentTimeMillis()
+            } finally {
+                dev.kidstubetv.proxy.SubscriptionUpdateGate.release()
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
@@ -429,7 +437,7 @@ class SettingsActivity : Activity() {
                     networkDetail.text = "下次启动 VPN 时生效"
                 }.onFailure {
                     networkState.text = "⚠ 导入失败"
-                    networkDetail.text = it.message ?: "无法读取文件"
+                    networkDetail.text = "文件无法读取，或不是有效的 Clash YAML 配置"
                 }
             }
         }, "kids-yaml-import").start()

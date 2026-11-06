@@ -26,7 +26,11 @@ object SubscriptionUpdater {
                 if (!current.autoRefreshDue || ProxyStatus.phase != ProxyStatus.Phase.READY) return@Thread
                 val url = current.subscriptionUrl
                 val yaml = SubscriptionClient().fetch(url)
-                // Core already parsed config.yaml. This saves for the next VPN session.
+                // A delayed response must not replace the profile after the VPN
+                // stopped or the parent switched to another subscription.
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+                    current.subscriptionUrl != url) return@Thread
+                // Core already parsed config.yaml. New profile loads next session.
                 current.writeProfile(yaml)
                 current.subscriptionUpdatedAt = System.currentTimeMillis()
             } catch (_: Exception) {
