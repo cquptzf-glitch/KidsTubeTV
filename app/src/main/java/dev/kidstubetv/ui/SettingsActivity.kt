@@ -17,6 +17,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import dev.kidstubetv.data.ChannelReference
+import dev.kidstubetv.data.YouTubeRepository
+import dev.kidstubetv.data.YouTubeChannelInfo
 import dev.kidstubetv.data.GoogleTvAuth
 import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
@@ -141,8 +144,11 @@ class SettingsActivity : Activity() {
         childSummary = TvUi.label(this, "", 18f)
         panel.addView(childSummary)
         TvUi.space(panel, this, 10)
-        panel.addView(TvUi.primaryButton(this, "管理允许的频道") {
-            editLines("批准频道 ID（每行一个 UC...）", store.channelsText) { store.channelsText = it }
+        panel.addView(TvUi.primaryButton(this, "＋ 通过频道链接添加") {
+            addChannelFromLink()
+        })
+        panel.addView(TvUi.button(this, "查看 / 删除已批准频道") {
+            manageApprovedChannels()
         })
         panel.addView(TvUi.button(this, "设置每日观看时长") { pickDailyLimit() })
         val searchControl = Switch(this).apply {
@@ -291,6 +297,76 @@ class SettingsActivity : Activity() {
         networkDetail.text = source + time
         accountSummary.text = if (GoogleTvAuth(this).isLinked) "Google 已授权（只读 YouTube 资料）"
             else "未登录 Google；也可使用 YouTube API Key 浏览"
+    }
+
+    /** One input + one confirmation, instead of typing a 24-character channel ID. */
+    private fun addChannelFromLink() {
+        val editor = EditText(this).apply {
+            hint = "https://youtube.com/@频道名 或 @handle"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("添加家长允许的频道")
+            .setMessage("粘贴频道链接或 @handle，查询后由家长确认加入。")
+            .setView(editor)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("查询频道", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reference = runCatching {
+                    ChannelReference.parse(editor.text.toString())
+                }.getOrElse { editor.error = it.message; return@setOnClickListener }
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                    editor.error = "请先从儿童首页建立 VPN 连接"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                childSummary.text = "正在确认频道信息…"
+                Thread({
+                    val result = runCatching { YouTubeRepository(store).resolveChannel(reference) }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        result.onSuccess { confirmChannel(it) }
+                            .onFailure {
+                                childSummary.text = "查询频道失败，请检查地址和网络 / YouTube API 配额"
+                            }
+                    }
+                }, "kids-parent-channel-resolve").start()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmChannel(channel: YouTubeChannelInfo) {
+        AlertDialog.Builder(this).setTitle("允许此频道？")
+            .setMessage("频道：${channel.title}\n\n只有由 YouTube 标记为儿童内容、允许嵌入且未被家长屏蔽的视频可以播放。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("加入白名单") { _, _ ->
+                store.channelsText = (store.allowedChannels + channel.id).joinToString("\n")
+                refreshSummaries()
+                childSummary.text = "已加入频道：${channel.title}"
+            }.show()
+    }
+
+    private fun manageApprovedChannels() {
+        val channels = store.allowedChannels.sorted()
+        if (channels.isEmpty()) {
+            childSummary.text = "暂无批准频道。可通过 @handle 或频道链接添加。"
+            return
+        }
+        val enabled = BooleanArray(channels.size) { true }
+        AlertDialog.Builder(this)
+            .setTitle("勾选保留的频道")
+            .setMultiChoiceItems(channels.toTypedArray(), enabled) { _, index, checked ->
+                enabled[index] = checked
+            }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存白名单") { _, _ ->
+                store.channelsText = channels.filterIndexed { i, _ -> enabled[i] }.joinToString("\n")
+                refreshSummaries()
+            }.show()
     }
 
     private fun editSubscription() {

@@ -57,6 +57,22 @@ class YouTubeRepository(private val settings: SettingsStore) {
         return lookup(ids)
     }
 
+    /** Resolve a parent-supplied official channel URL/handle before approval. */
+    fun resolveChannel(reference: ChannelReference): YouTubeChannelInfo {
+        val filter = when (reference) {
+            is ChannelReference.Id -> "id" to reference.value
+            is ChannelReference.Handle -> "forHandle" to reference.value
+            is ChannelReference.Username -> "forUsername" to reference.value
+        }
+        val response = get("channels", mapOf("part" to "snippet", filter))
+        val entry = response.optJSONArray("items")?.optJSONObject(0)
+            ?: error("没有找到此 YouTube 频道")
+        val id = entry.optString("id")
+        require(id.matches(Regex("UC[A-Za-z0-9_-]{22}"))) { "返回了无效的频道 ID" }
+        val title = entry.optJSONObject("snippet")?.optString("title").orEmpty()
+        return YouTubeChannelInfo(id, title.ifBlank { id })
+    }
+
     /**
      * Home combines a bounded set of approved channels and exact-approved
      * videos. Every candidate still passes videos.list admission checks.
