@@ -38,5 +38,6 @@ dependencies {
     // GPLv3 Mihomo Android bridge. Run scripts/fetch-mihomo.sh or .ps1 before build.
     implementation(files("libs/libmihomo-android-v0.3.13.aar"))
 
+    implementation("com.github.bumptech.glide:glide:4.16.0")
     testImplementation("junit:junit:4.13.2")
 }
