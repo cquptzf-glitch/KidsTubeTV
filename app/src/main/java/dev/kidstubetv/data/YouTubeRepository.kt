@@ -5,88 +5,71 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Uses the documented YouTube Data API, not reverse engineered YouTube endpoints.
- * All calls must be scheduled after the app-specific VPN has been established.
- */
+/** YouTube Data API v3, never retrieves video from undocumented endpoints. */
 class YouTubeRepository(private val settings: SettingsStore) {
     fun search(query: String): List<KidVideo> {
-        require(settings.apiKey.isNotBlank()) { "YouTube Data API key missing" }
-        val search = get("search", mapOf(
+        require(query.length in 1..128) { "搜索词长度不正确" }
+        val result = get("search", mapOf(
             "part" to "snippet",
             "type" to "video",
             "q" to query,
-            "maxResults" to "20",
+            "maxResults" to "30",
             "safeSearch" to "strict",
             "videoEmbeddable" to "true",
         ))
-        val ids = search.optJSONArray("items")?.let { list ->
-            (0 until list.length()).mapNotNull {
-                list.optJSONObject(it)?.optJSONObject("id")?.optString("videoId")?.takeIf(String::isNotBlank)
+        val ids = result.optJSONArray("items")?.let { a ->
+            (0 until a.length()).mapNotNull {
+                a.optJSONObject(it)?.optJSONObject("id")?.optString("videoId")
+                    ?.takeIf { id -> id.matches(Regex("[A-Za-z0-9_-]{11}")) }
             }
-        } ?: emptyList()
-        if (ids.isEmpty()) return emptyList()
-
-        val detail = get("videos", mapOf("part" to "snippet,status", "id" to ids.joinToString(",")))
-        val allowedChannels = settings.allowedChannels
-        val allowedVideos = settings.approvedVideoIds
-        val blocked = settings.blockedVideoIds
-        val valid = mutableMapOf<String, KidVideo>()
-        val items = detail.optJSONArray("items") ?: return emptyList()
-        for (i in 0 until items.length()) {
-            val row = items.optJSONObject(i) ?: continue
-            val snippet = row.optJSONObject("snippet") ?: continue
-            val status = row.optJSONObject("status") ?: continue
-            val thumbnails = snippet.optJSONObject("thumbnails")
-            val image = (thumbnails?.optJSONObject("medium") ?: thumbnails?.optJSONObject("default"))
-                ?.optString("url").orEmpty()
-            val video = KidVideo(
-                id = row.optString("id"),
-                title = snippet.optString("title"),
-                channelId = snippet.optString("channelId"),
-                channelTitle = snippet.optString("channelTitle"),
-                thumbnailUrl = image,
-            )
-            if (AdmissionPolicy.allows(
-                video, status.optBoolean("madeForKids", false), status.optBoolean("embeddable", false),
-                allowedChannels, allowedVideos, blocked
-            )) valid[video.id] = video
-        }
-        return ids.mapNotNull(valid::get)
+        }.orEmpty()
+        return lookup(ids)
     }
 
-    /** Re-check each selected video at admission time; never trust stale UI/Intent data. */
-    fun approveSingle(videoId: String): KidVideo? {
-        if (!videoId.matches(Regex("[A-Za-z0-9_-]{11}"))) return null
-        val result = get("videos", mapOf("part" to "snippet,status", "id" to videoId))
-        val row = result.optJSONArray("items")?.optJSONObject(0) ?: return null
-        val snippet = row.optJSONObject("snippet") ?: return null
-        val status = row.optJSONObject("status") ?: return null
-        val video = KidVideo(row.optString("id"), snippet.optString("title"),
-            snippet.optString("channelId"), snippet.optString("channelTitle"), "")
-        return video.takeIf {
-            AdmissionPolicy.allows(it, status.optBoolean("madeForKids", false),
-                status.optBoolean("embeddable", false),
-                settings.allowedChannels, settings.approvedVideoIds, settings.blockedVideoIds)
+    /** 50 IDs per videos.list; avoids the 100-unit search quota for favorites/history. */
+    fun lookup(videoIds: List<String>): List<KidVideo> {
+        val validIds = videoIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+        if (validIds.isEmpty()) return emptyList()
+        val verified = mutableMapOf<String, KidVideo>()
+        validIds.chunked(50).forEach { chunk ->
+            val response = get("videos", mapOf("part" to "snippet,status", "id" to chunk.joinToString(",")))
+            val items = response.optJSONArray("items") ?: return@forEach
+            for (i in 0 until items.length()) {
+                val obj = items.optJSONObject(i) ?: continue
+                val snippet = obj.optJSONObject("snippet") ?: continue
+                val status = obj.optJSONObject("status") ?: continue
+                val thumbnails = snippet.optJSONObject("thumbnails")
+                val thumb = (thumbnails?.optJSONObject("medium") ?: thumbnails?.optJSONObject("default"))
+                    ?.optString("url").orEmpty()
+                val video = KidVideo(obj.optString("id"), snippet.optString("title"),
+                    snippet.optString("channelId"), snippet.optString("channelTitle"), thumb)
+                if (AdmissionPolicy.allows(video, status.optBoolean("madeForKids", false),
+                        status.optBoolean("embeddable", false),
+                        settings.allowedChannels, settings.approvedVideoIds, settings.blockedVideoIds)) {
+                    verified[video.id] = video
+                }
+            }
         }
+        return validIds.mapNotNull(verified::get)
     }
 
-    private fun get(route: String, params: Map<String, String>): JSONObject {
-        val uri = Uri.parse("https://www.googleapis.com/youtube/v3/$route")
-            .buildUpon().apply { params.forEach { (name, value) -> appendQueryParameter(name, value) } }.build()
-        val connection = URL(uri.toString()).openConnection() as HttpURLConnection
-        connection.connectTimeout = 12_000
-        connection.readTimeout = 15_000
-        connection.setRequestProperty("X-Goog-Api-Key", settings.apiKey)
-        connection.setRequestProperty("Accept", "application/json")
+    /** Recheck at every play/next, independent of the navigation queue. */
+    fun approveSingle(id: String): KidVideo? = lookup(listOf(id)).firstOrNull()
+
+    private fun get(endpoint: String, params: Map<String, String>): JSONObject {
+        val key = settings.apiKey
+        require(key.isNotBlank()) { "请先配置 YouTube Data API 密钥" }
+        val uri = Uri.parse("https://www.googleapis.com/youtube/v3/$endpoint").buildUpon()
+            .apply { params.forEach { (k, v) -> appendQueryParameter(k, v) } }.build()
+        val conn = URL(uri.toString()).openConnection() as HttpURLConnection
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 15_000
+        conn.setRequestProperty("X-Goog-Api-Key", key)
+        conn.setRequestProperty("Accept", "application/json")
         try {
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                throw IllegalStateException("YouTube API HTTP $code (check API key, quota and network)")
-            }
-            return JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-        } finally {
-            connection.disconnect()
-        }
+            val code = conn.responseCode
+            require(code in 200..299) { "YouTube HTTP $code（检查 VPN / 配额 / API Key）" }
+            return JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+        } finally { conn.disconnect() }
     }
 }
