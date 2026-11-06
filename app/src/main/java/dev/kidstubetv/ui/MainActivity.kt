@@ -122,7 +122,7 @@ class MainActivity : Activity() {
             setTextColor(TvUi.muted)
         }
         top.addView(status)
-        body.addView(top, LinearLayout.LayoutParams(-1, TvUi.dp(this, 57)))
+        body.addView(top, LinearLayout.LayoutParams(-1, TvUi.dp(this, 49)))
 
         scrolling = ScrollView(this).apply {
             isFillViewport = true
@@ -351,78 +351,35 @@ class MainActivity : Activity() {
             return
         }
         val ids = ArrayList(videos.map { it.id })
-        val firstVideo = videos.first()
-        val hero = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            isFocusable = true
-            isClickable = true
-            tag = "menu-edge"
-            setPadding(TvUi.dp(this@MainActivity, 32), TvUi.dp(this@MainActivity, 22),
-                TvUi.dp(this@MainActivity, 28), TvUi.dp(this@MainActivity, 22))
-            background = heroShape(false)
-            setOnFocusChangeListener { _, focused ->
-                background = heroShape(focused)
-                scaleX = if (focused) 1.012f else 1f
-                scaleY = if (focused) 1.012f else 1f
-            }
-            setOnClickListener { openVideo(ids, 0) }
-        }
-        val copy = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        copy.addView(TvUi.label(this, "✦  " + name, 16f, true))
-        copy.addView(TvUi.label(this, firstVideo.title, 31f).apply {
-            setTypeface(typeface, Typeface.BOLD)
-            maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        })
-        copy.addView(TvUi.label(this, firstVideo.channelTitle, 15f).apply {
-            setTextColor(TvUi.muted)
-        })
-        TvUi.space(copy, this, 12)
-        copy.addView(TvUi.label(this, "▶  按确定播放", 18f).apply {
-            setTextColor(TvUi.warm)
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        hero.addView(copy, LinearLayout.LayoutParams(0, -1, 1.2f))
-        val bigImage = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            contentDescription = firstVideo.title
-            background = TvUi.rounded(this@MainActivity, TvUi.surface, 19)
-            clipToOutline = true
-        }
-        hero.addView(bigImage, LinearLayout.LayoutParams(0, -1, 1f).apply {
-            leftMargin = TvUi.dp(this@MainActivity, 22)
-        })
-        if (firstVideo.thumbnailUrl.startsWith("https://")) {
-            Glide.with(this).load(firstVideo.thumbnailUrl).centerCrop().into(bigImage)
-        }
-        list.addView(hero, LinearLayout.LayoutParams(-1, TvUi.dp(this, 245)))
-        TvUi.space(list, this, 23)
-        list.addView(TvUi.label(this, "继续探索", 24f).apply {
+        val hero = TvHeroCard.make(this, videos.first(), name) { openVideo(ids, 0) }
+        val heroDp = (resources.displayMetrics.heightPixels /
+            resources.displayMetrics.density * 0.43f).toInt().coerceIn(255, 380)
+        list.addView(hero, LinearLayout.LayoutParams(-1, TvUi.dp(this, heroDp)))
+        TvUi.space(list, this, 19)
+        list.addView(TvUi.label(this, "发现更多精彩", 24f).apply {
             setTypeface(typeface, Typeface.BOLD)
         })
         TvUi.space(list, this, 8)
 
+        val gap = TvUi.dp(this, 18)
+        val horizontalSpace = resources.displayMetrics.widthPixels - TvUi.dp(this, 88)
+        val columns = if ((horizontalSpace - 2 * gap) / 3 < TvUi.dp(this, 205)) 2 else 3
+        val cardWidth = ((horizontalSpace - (columns - 1) * gap) / columns)
+            .coerceAtLeast(TvUi.dp(this, 150))
         val grid = GridLayout(this).apply {
-            columnCount = 3
+            columnCount = columns
             clipChildren = false
             clipToPadding = false
             setPadding(0, 0, 0, TvUi.dp(this@MainActivity, 22))
         }
-        val gap = TvUi.dp(this, 16)
-        val available = resources.displayMetrics.widthPixels - TvUi.dp(this, 88) - gap * 2
-        val cardWidth = (available / 3).coerceAtLeast(TvUi.dp(this, 180))
-        videos.forEachIndexed { i, item ->
-            val card = TvVideoCard.make(this, item, cardWidth, onClick = { openVideo(ids, i) })
-            if (i % 3 == 0) card.tag = "menu-edge"
+        videos.forEachIndexed { index, video ->
+            val card = TvVideoCard.make(this, video, cardWidth) { openVideo(ids, index) }
+            if (index % columns == 0) card.tag = "menu-edge"
             grid.addView(card, GridLayout.LayoutParams().apply {
                 width = cardWidth
                 height = -2
-                if (i % 3 != 2) rightMargin = gap
-                bottomMargin = TvUi.dp(this@MainActivity, 13)
+                if (index % columns != columns - 1) rightMargin = gap
+                bottomMargin = TvUi.dp(this@MainActivity, 20)
             })
         }
         list.addView(grid)
