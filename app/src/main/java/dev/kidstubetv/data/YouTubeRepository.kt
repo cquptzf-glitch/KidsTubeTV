@@ -57,6 +57,29 @@ class YouTubeRepository(private val settings: SettingsStore) {
         return lookup(ids)
     }
 
+    /**
+     * Parent-only metadata inspection for a single pasted video, independent of
+     * current whitelist. The confirmation UI must explicitly approve the ID.
+     */
+    fun inspectVideoForParent(id: String): KidVideo {
+        require(id.matches(Regex("[A-Za-z0-9_-]{11}"))) { "无效的视频 ID" }
+        val data = get("videos", mapOf("part" to "snippet,status", "id" to id))
+        val item = data.optJSONArray("items")?.optJSONObject(0)
+            ?: error("找不到该 YouTube 视频")
+        val snippet = item.optJSONObject("snippet") ?: error("视频缺少频道信息")
+        val status = item.optJSONObject("status") ?: error("无法验证视频儿童状态")
+        require(status.optBoolean("madeForKids", false) &&
+            status.optBoolean("embeddable", false)) {
+            "该视频未标记为儿童内容，或禁止嵌入播放"
+        }
+        return KidVideo(id,
+            snippet.optString("title"),
+            snippet.optString("channelId"),
+            snippet.optString("channelTitle"),
+            snippet.optJSONObject("thumbnails")?.optJSONObject("medium")?.optString("url").orEmpty()
+        )
+    }
+
     /** Resolve a parent-supplied official channel URL/handle before approval. */
     fun resolveChannel(reference: ChannelReference): YouTubeChannelInfo {
         val filter = when (reference) {

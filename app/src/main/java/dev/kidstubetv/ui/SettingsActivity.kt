@@ -18,6 +18,8 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import dev.kidstubetv.data.ChannelReference
+import dev.kidstubetv.data.YouTubeVideoReference
+import dev.kidstubetv.data.KidVideo
 import dev.kidstubetv.data.YouTubeRepository
 import dev.kidstubetv.data.YouTubeChannelInfo
 import dev.kidstubetv.data.GoogleTvAuth
@@ -167,6 +169,9 @@ class SettingsActivity : Activity() {
             editValue("YouTube Data API v3 Key", store.apiKey, secret = true) {
                 store.apiKey = it.trim()
             }
+        })
+        panel.addView(TvUi.button(this, "＋ 通过视频链接添加") {
+            addVideoFromLink()
         })
         panel.addView(TvUi.button(this, "精确允许的视频 ID") {
             editLines("允许的视频 ID（每行 11 位）", store.allowedVideosText) {
@@ -347,6 +352,56 @@ class SettingsActivity : Activity() {
                 store.channelsText = (store.allowedChannels + channel.id).joinToString("\n")
                 refreshSummaries()
                 childSummary.text = "已加入频道：${channel.title}"
+            }.show()
+    }
+
+    private fun addVideoFromLink() {
+        val editor = EditText(this).apply {
+            hint = "https://youtu.be/… 或 YouTube 视频 URL"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("添加允许的视频")
+            .setMessage("粘贴分享链接；视频必须可嵌入且标记为儿童内容。")
+            .setView(editor)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("检查视频", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val id = runCatching {
+                    YouTubeVideoReference.parse(editor.text.toString())
+                }.getOrElse { editor.error = it.message; return@setOnClickListener }
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                    editor.error = "请先连接 VPN 再检查视频信息"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                childSummary.text = "正在检查视频的儿童标记与播放限制…"
+                Thread({
+                    val result = runCatching { YouTubeRepository(store).inspectVideoForParent(id) }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        result.onSuccess { confirmVideo(it) }
+                            .onFailure { childSummary.text =
+                                "未能确认视频适合儿童，不能添加（检查网络、API Key、视频权限）" }
+                    }
+                }, "kids-parent-video-inspect").start()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmVideo(video: KidVideo) {
+        AlertDialog.Builder(this).setTitle("批准这条视频？")
+            .setMessage("${video.title}\n频道：${video.channelTitle}\n\n添加后孩子可以从家长精选直接播放。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("允许播放") { _, _ ->
+                val updated = store.approvedVideoIds + video.id
+                store.allowedVideosText = updated.joinToString("\n")
+                refreshSummaries()
+                childSummary.text = "已批准视频：${video.title}"
             }.show()
     }
 
