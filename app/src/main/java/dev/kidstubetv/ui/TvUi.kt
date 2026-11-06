@@ -37,7 +37,7 @@ internal object TvUi {
         TextView(ctx).apply {
             text = value
             textSize = sp
-            setTextColor(if (accent) mint else text)
+            setTextColor(if (accent) TvUi.mint else TvUi.text)
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(ctx, 2), dp(ctx, 6), dp(ctx, 2), dp(ctx, 6))
         }
@@ -47,7 +47,7 @@ internal object TvUi {
             text = value
             isAllCaps = false
             textSize = 17f
-            setTextColor(text)
+            setTextColor(TvUi.text)
             background = buttonShape(ctx, false)
             setPadding(dp(ctx, 18), dp(ctx, 11), dp(ctx, 18), dp(ctx, 11))
             setOnClickListener { click() }
@@ -77,7 +77,7 @@ internal object TvUi {
             setSingleLine(!multiline)
             if (multiline) minLines = 3
             textSize = 17f
-            setTextColor(text)
+            setTextColor(TvUi.text)
             setHintTextColor(muted)
             setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10))
             setBackgroundColor(surface)
