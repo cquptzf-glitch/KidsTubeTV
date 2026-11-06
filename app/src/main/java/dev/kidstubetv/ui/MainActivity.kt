@@ -61,7 +61,8 @@ class MainActivity : Activity() {
     private var recoveryScheduled = false
     private val recoverVpn = Runnable {
         recoveryScheduled = false
-        if (isFinishing || isDestroyed || consentDeclined || !settings.proxyReady) return@Runnable
+        if (isFinishing || isDestroyed || consentDeclined || VpnManualPause.isPaused ||
+            !settings.proxyReady) return@Runnable
         if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
             ProxyStatus.phase == ProxyStatus.Phase.STARTING) return@Runnable
         requestVpn()
@@ -134,6 +135,7 @@ class MainActivity : Activity() {
                 ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)) {
             evaluateVpnRecovery()
         } else if (settings.proxyReady && !consentPending && !consentDeclined &&
+            !VpnManualPause.isPaused &&
             ProxyStatus.phase == ProxyStatus.Phase.OFF && !recoveryScheduled &&
             !recoveryPolicy.exhausted) {
             requestVpn()
@@ -219,6 +221,7 @@ class MainActivity : Activity() {
             background = warningShape()
             setOnClickListener {
                 consentDeclined = false
+                VpnManualPause.resume()
                 recoveryPolicy.onManualRetry()
                 mainHandler.removeCallbacks(recoverVpn)
                 recoveryScheduled = false
@@ -472,7 +475,7 @@ class MainActivity : Activity() {
 
     private fun evaluateVpnRecovery() {
         if (isFinishing || isDestroyed || consentDeclined || consentPending ||
-            !settings.proxyReady || recoveryScheduled) return
+            !settings.proxyReady || VpnManualPause.isPaused || recoveryScheduled) return
         if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
             ProxyNetworkHealth.state == ProxyNetworkHealth.State.ONLINE) {
             recoveryPolicy.onHealthy()
@@ -505,7 +508,10 @@ class MainActivity : Activity() {
             ProxyStatus.Phase.ERROR -> if (recoveryScheduled)
                 "⚠ VPN 异常 · 正在自动重新连接" else
                 "⚠ VPN 异常 · 按确定重试"
-            ProxyStatus.Phase.OFF -> if (settings.proxyReady) "⚠ 网络已断开 · 按确定重新连接" else null
+            ProxyStatus.Phase.OFF -> if (settings.proxyReady) {
+                if (VpnManualPause.isPaused) "○ 家长已断开 VPN · 按确定连接"
+                else "⚠ 网络已断开 · 按确定重新连接"
+            } else null
             ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
                 (if (recoveryScheduled) "⚠ Google 不可达 · 自动重连中"
                     else "⚠ 无法访问 Google · 按确定重新连接") else null
@@ -584,6 +590,7 @@ class MainActivity : Activity() {
     }
 
     private fun requestVpn() {
+        if (VpnManualPause.isPaused) { updateVpnChrome(); return }
         if (!settings.proxyReady) { showPlaceholder(); return }
         if (consentPending || ProxyStatus.phase == ProxyStatus.Phase.READY ||
             ProxyStatus.phase == ProxyStatus.Phase.STARTING) return

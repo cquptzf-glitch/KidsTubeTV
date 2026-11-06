@@ -33,6 +33,7 @@ import dev.kidstubetv.data.ClipboardSubscriptionPolicy
 import dev.kidstubetv.data.WatchHistory
 import dev.kidstubetv.data.WatchTime
 import dev.kidstubetv.proxy.KidsVpnService
+import dev.kidstubetv.proxy.VpnManualPause
 import dev.kidstubetv.proxy.ProxyNetworkHealth
 import dev.kidstubetv.proxy.ProxyStatus
 import java.io.ByteArrayOutputStream
@@ -291,8 +292,9 @@ class SettingsActivity : Activity() {
             }
         })
         networkAdvanced.addView(TvUi.button(this, "关闭当前 VPN") {
+            VpnManualPause.pause()
             KidsVpnService.stop(this)
-            networkState.text = "正在断开连接…"
+            networkState.text = "家长已暂停 VPN，返回首页后不会自动连接"
         })
         TvUi.space(networkAdvanced, this, 12)
     }

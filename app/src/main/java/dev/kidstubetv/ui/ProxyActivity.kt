@@ -11,6 +11,7 @@ import android.widget.TextView
 import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.proxy.KidsVpnService
+import dev.kidstubetv.proxy.VpnManualPause
 import dev.kidstubetv.proxy.MihomoControl
 import dev.kidstubetv.proxy.ProxyGroup
 import dev.kidstubetv.proxy.ProxyStatus
@@ -87,8 +88,9 @@ class ProxyActivity : Activity() {
             }
         })
         advanced.addView(TvUi.button(this, "断开 VPN") {
+            VpnManualPause.pause()
             KidsVpnService.stop(this)
-            state.text = "正在关闭代理"
+            state.text = "家长已暂停 VPN；需从首页手动重新连接"
         })
         content.addView(TvUi.button(this, "返回网络设置") { finish() })
         load()
