@@ -1,0 +1,30 @@
+name: Build official FlClash Go core (experimental)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+      - name: Install Android NDK and SDK platform
+        run: |
+          SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDK_MANAGER" --licenses >/dev/null || true
+          "$SDK_MANAGER" --install "platforms;android-36" "ndk;28.2.13676358"
+      - name: Build pinned upstream Go mobile AAR
+        env:
+          FLCLASH_TAG: v0.9.3
+          NDK_VERSION: 28.2.13676358
+        run: bash scripts/build-official-flclash-core.sh
+      - name: Upload source provenance and AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: flclash-v0.9.3-source-built-android-core
+          path: dist/flclash-core/*
+          retention-days: 30
