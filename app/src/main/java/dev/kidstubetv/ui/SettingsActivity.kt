@@ -186,6 +186,16 @@ class SettingsActivity : Activity() {
             }
         }
         panel.addView(searchControl)
+        panel.addView(Switch(this).apply {
+            text = "允许自动播放下一集"
+            textSize = 18f
+            setTextColor(TvUi.text)
+            isChecked = store.autoplayNext
+            setOnCheckedChangeListener { _, enabled ->
+                store.autoplayNext = enabled
+                refreshSummaries()
+            }
+        })
         TvUi.space(panel, this, 10)
         panel.addView(TvUi.button(this, "设置 YouTube API Key（可选）") {
             editValue("YouTube Data API v3 Key", store.apiKey, secret = true) {

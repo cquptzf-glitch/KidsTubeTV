@@ -52,6 +52,11 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean("allow_search", false)
         set(v) { prefs.edit().putBoolean("allow_search", v).apply() }
 
+    /** Parent controls continuous playback; default retains existing behavior. */
+    var autoplayNext: Boolean
+        get() = prefs.getBoolean("autoplay_next", true)
+        set(v) { prefs.edit().putBoolean("autoplay_next", v).apply() }
+
     var dailyLimitMinutes: Int
         get() = prefs.getInt("daily_limit", 30).coerceIn(5, 180)
         set(v) { prefs.edit().putInt("daily_limit", v.coerceIn(5,180)).apply() }

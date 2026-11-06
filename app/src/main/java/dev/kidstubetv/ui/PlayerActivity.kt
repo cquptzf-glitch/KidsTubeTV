@@ -174,7 +174,12 @@ class PlayerActivity : Activity() {
                     completedVideoId = approvedVideoId
                     approvedVideoId?.let { history.clearPosition(it) }
                     lastSavedSecond = 0f
-                    scheduleNext()
+                    if (settings.autoplayNext) scheduleNext()
+                    else {
+                        cancelNext()
+                        revealControls()
+                        videoTitle.text = "本集结束啦！可按下一集继续观看"
+                    }
                 }
             }
 
