@@ -52,6 +52,14 @@ class MainActivity : Activity() {
     private var consentPending = false
     private var consentDeclined = false
     private val hideDrawerLater = Runnable { if (::drawer.isInitialized) hideDrawer() }
+    private val networkPulse = object : Runnable {
+        override fun run() {
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+                ProxyNetworkHealth.check(this@MainActivity)
+            }
+            mainHandler.postDelayed(this, 25_000)
+        }
+    }
 
     private val proxyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,7 +75,11 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter(ProxyStatus.ACTION_CHANGED)
+        val filter = IntentFilter(ProxyStatus.ACTION_CHANGED).apply {
+            addAction(ProxyNetworkHealth.ACTION_CHANGED)
+        }
+        mainHandler.removeCallbacks(networkPulse)
+        mainHandler.post(networkPulse)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(proxyReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -86,6 +98,7 @@ class MainActivity : Activity() {
 
     override fun onStop() {
         unregisterReceiver(proxyReceiver)
+        mainHandler.removeCallbacks(networkPulse)
         nextRequest++
         super.onStop()
     }
@@ -154,7 +167,8 @@ class MainActivity : Activity() {
             background = warningShape()
             setOnClickListener {
                 consentDeclined = false
-                requestVpn()
+                if (ProxyStatus.phase == ProxyStatus.Phase.READY) ProxyNetworkHealth.check(this@MainActivity)
+                else requestVpn()
             }
             visibility = View.GONE
         }
@@ -434,15 +448,18 @@ class MainActivity : Activity() {
     private fun updateVpnChrome() {
         if (!::status.isInitialized) return
         status.text = when (ProxyStatus.phase) {
-            ProxyStatus.Phase.READY -> "● 网络已连接"
+            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+                "● 网络异常" else "● 网络已连接"
             ProxyStatus.Phase.STARTING -> "◌ 正在连接"
             else -> "○ 网络未就绪"
         }
         status.setTextColor(if (ProxyStatus.phase == ProxyStatus.Phase.READY)
             TvUi.mint else TvUi.muted)
         val error = when (ProxyStatus.phase) {
-            ProxyStatus.Phase.ERROR -> "⚠  VPN 连接异常 · 按确定重试"
-            ProxyStatus.Phase.OFF -> if (settings.proxyReady) "⚠  网络已断开 · 按确定重新连接" else null
+            ProxyStatus.Phase.ERROR -> "⚠ VPN 连接异常 · 按确定重试"
+            ProxyStatus.Phase.OFF -> if (settings.proxyReady) "⚠ 网络已断开 · 按确定重新连接" else null
+            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+                "⚠ VPN 已建立，但无法访问 Google · 按确定检测网络" else null
             else -> null
         }
         errorBar.text = error.orEmpty()
@@ -544,6 +561,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideDrawerLater)
+        mainHandler.removeCallbacks(networkPulse)
         super.onDestroy()
     }
 
