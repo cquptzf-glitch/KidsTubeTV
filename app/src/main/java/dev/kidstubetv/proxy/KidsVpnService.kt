@@ -54,8 +54,12 @@ class KidsVpnService : VpnService() {
                 val profile = SettingsStore(this).profileFile
                 require(profile.isFile) { "Missing Mihomo profile. Import in Parent Settings." }
                 Clash.load(applicationInfo.nativeLibraryDir)
-                val init = JSONObject().put("homeDir", filesDir.absolutePath).toString()
-                val setup = JSONObject().put("profile", profile.absolutePath).toString()
+                // The SDK requires the profile at <home-dir>/config.yaml, not an arbitrary path.
+                // Its init schema is {"home-dir": string, "version": Android SDK int}.
+                val init = JSONObject()
+                    .put("home-dir", profile.parentFile!!.absolutePath)
+                    .put("version", Build.VERSION.SDK_INT).toString()
+                val setup = JSONObject().put("selected-map", JSONObject()).toString()
                 Clash.quickSetup(init, setup) { error ->
                     main.post {
                         if (!active.get()) return@post
