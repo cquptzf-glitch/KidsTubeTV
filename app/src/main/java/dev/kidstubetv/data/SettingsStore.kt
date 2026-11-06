@@ -69,7 +69,7 @@ class SettingsStore(context: Context) {
     val blockedVideoIds: Set<String> get() = tokenize(blockedVideosText)
         .filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }.toSet()
 
-    val profileFile: File get() = File(dir, "mihomo/profile.yaml")
+    val profileFile: File get() = File(dir, "mihomo/config.yaml")
     val hasProfile: Boolean get() = profileFile.isFile && profileFile.length() > 0
 
     val ready: Boolean get() = apiKey.isNotBlank() &&
@@ -115,7 +115,7 @@ class SettingsStore(context: Context) {
         val file = profileFile
         file.parentFile?.mkdirs()
         val temp = File(file.parentFile, "profile-new.tmp")
-        val backup = File(file.parentFile, "profile-backup.yaml")
+        val backup = File(file.parentFile, "config-backup.yaml")
         temp.writeText(content, Charsets.UTF_8)
         require(temp.length() in 12..SubscriptionFormat.MAX_PROFILE_BYTES.toLong()) { "配置格式或大小异常" }
         if (file.exists()) {
@@ -129,7 +129,7 @@ class SettingsStore(context: Context) {
     }
 
     @Synchronized fun restoreBackup(): Boolean {
-        val backup = File(profileFile.parentFile, "profile-backup.yaml")
+        val backup = File(profileFile.parentFile, "config-backup.yaml")
         if (!backup.isFile) return false
         profileFile.delete()
         return backup.renameTo(profileFile)
