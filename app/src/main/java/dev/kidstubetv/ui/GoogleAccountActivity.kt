@@ -177,6 +177,9 @@ class GoogleAccountActivity : Activity() {
                 val updated = ApprovedPickerPolicy.apply(
                     settings.allowedChannels, displayed, chosen)
                 settings.channelsText = updated.joinToString("\n")
+                channels.filterIndexed { index, _ -> selected[index] }.forEach {
+                    settings.rememberChannelName(it.channelId, it.title)
+                }
                 status.text = "已批准 " + updated.size +
                     " 个频道。请返回儿童首页查看批准频道。"
             }

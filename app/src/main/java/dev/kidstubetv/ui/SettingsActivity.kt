@@ -353,6 +353,7 @@ class SettingsActivity : Activity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("加入白名单") { _, _ ->
                 store.channelsText = (store.allowedChannels + channel.id).joinToString("\n")
+                store.rememberChannelName(channel.id, channel.title)
                 refreshSummaries()
                 childSummary.text = "已加入频道：${channel.title}"
             }.show()

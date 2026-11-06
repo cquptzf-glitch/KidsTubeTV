@@ -236,6 +236,7 @@ class MainActivity : Activity() {
                 YouTubeRepository(settings).search("bedtime English stories children")
             }
         }
+        addDrawerItem("▦  我的频道") { showApprovedChannelPicker() }
         addDrawerItem("★  我的收藏") {
             loadCollection("favorites", "我的收藏") {
                 YouTubeRepository(settings).lookup(WatchHistory(this).favorites().toList())
@@ -456,6 +457,29 @@ class MainActivity : Activity() {
         errorBar.text = error.orEmpty()
         errorBar.visibility = if (error == null) View.GONE else View.VISIBLE
         if (ProxyStatus.phase == ProxyStatus.Phase.OFF) loadedAfterConnection = false
+    }
+
+    private fun showApprovedChannelPicker() {
+        val ids = settings.allowedChannels.toList()
+        if (ids.isEmpty()) {
+            list.removeAllViews()
+            list.addView(TvUi.label(this, "还没有家长批准的频道。", 24f))
+            return
+        }
+        val names = settings.channelNames
+        val items = ids.mapIndexed { index, id ->
+            names[id]?.takeIf { it.isNotBlank() } ?: "已批准频道 ${index + 1}"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("我的频道")
+            .setItems(items.toTypedArray()) { _, index ->
+                val channelId = ids[index]
+                loadCollection("channel-$channelId", items[index]) {
+                    YouTubeRepository(settings).uploads(channelId)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun searchDialog() {

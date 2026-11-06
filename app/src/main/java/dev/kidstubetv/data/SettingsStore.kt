@@ -68,6 +68,28 @@ class SettingsStore(context: Context) {
         get() = subscriptionUrl.isNotBlank() && subscriptionIntervalHours > 0 &&
             System.currentTimeMillis() - subscriptionUpdatedAt > subscriptionIntervalHours * 3_600_000L
 
+    val channelNames: Map<String, String>
+        get() {
+            val json = runCatching {
+                JSONObject(prefs.getString("channel_names", "{}") ?: "{}")
+            }.getOrDefault(JSONObject())
+            return json.keys().asSequence().mapNotNull { key ->
+                if (!key.matches(Regex("UC[A-Za-z0-9_-]{22}"))) return@mapNotNull null
+                json.optString(key).takeIf(String::isNotBlank)?.let { key to it }
+            }.toMap()
+        }
+
+    fun rememberChannelName(id: String, title: String) {
+        require(id.matches(Regex("UC[A-Za-z0-9_-]{22}"))) { "无效频道 ID" }
+        val label = ChannelLabelPolicy.clean(title)
+        if (label.isBlank()) return
+        synchronized(PROFILE_LOCK) {
+            val copy = JSONObject(channelNames)
+            copy.put(id, label)
+            prefs.edit().putString("channel_names", copy.toString()).apply()
+        }
+    }
+
     val approvedChannels: Set<String> get() = tokenize(channelsText)
         .filter { it.matches(Regex("UC[A-Za-z0-9_-]{22}")) }.toSet()
     val allowedChannels: Set<String> get() = approvedChannels
