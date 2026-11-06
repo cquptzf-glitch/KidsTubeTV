@@ -49,6 +49,7 @@ class PlayerActivity : Activity() {
     private var admissionPending = false
     private var player: YouTubePlayer? = null
     private var positionSeconds = 0f
+    private var lastSavedSecond = 0f
     private var playing = false
     private var lastRecordedVideo: String? = null
     private var autoNext: Runnable? = null
@@ -152,7 +153,7 @@ class PlayerActivity : Activity() {
                 iframeReady = true
                 if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
                     ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE)
-                    approvedVideoId?.let { youTubePlayer.loadVideo(it, 0f) }
+                    approvedVideoId?.let { youTubePlayer.loadVideo(it, history.resumePosition(it)) }
             }
 
             override fun onStateChange(
@@ -168,11 +169,20 @@ class PlayerActivity : Activity() {
                     }
                     scheduleAutoHide()
                 }
-                if (state == PlayerConstants.PlayerState.ENDED) scheduleNext()
+                if (state == PlayerConstants.PlayerState.ENDED) {
+                    approvedVideoId?.let { history.clearPosition(it) }
+                    lastSavedSecond = 0f
+                    scheduleNext()
+                }
             }
 
             override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
                 positionSeconds = second
+                val currentId = approvedVideoId
+                if (playing && currentId != null && second - lastSavedSecond >= 12f) {
+                    history.savePosition(currentId, second)
+                    lastSavedSecond = second
+                }
             }
 
             override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) {
@@ -214,6 +224,7 @@ class PlayerActivity : Activity() {
         handler.removeCallbacks(playbackTick)
         handler.removeCallbacks(hideControls)
         cancelNext()
+        savePlaybackPosition()
         playing = false
         player?.pause()
         unregisterReceiver(vpnReceiver)
@@ -246,8 +257,11 @@ class PlayerActivity : Activity() {
             pauseOnVpnLost()
             return
         }
+        savePlaybackPosition()
         position = newPosition
         approvedVideoId = null
+        positionSeconds = 0f
+        lastSavedSecond = 0f
         player?.pause()
         val request = ++requestSerial
         admissionPending = true
@@ -273,7 +287,7 @@ class PlayerActivity : Activity() {
                 approvedVideoId = item.id
                 videoTitle.text = item.title
                 favoriteButton.text = if (history.isFavorite(item.id)) "★ 已收藏" else "☆ 收藏"
-                if (iframeReady) player?.loadVideo(item.id, 0f)
+                if (iframeReady) player?.loadVideo(item.id, history.resumePosition(item.id))
             }
         }, "kids-video-admission").start()
     }
@@ -315,7 +329,12 @@ class PlayerActivity : Activity() {
         player?.let { if (playing) it.pause() else it.play() }
     }
 
+    private fun savePlaybackPosition() {
+        approvedVideoId?.let { history.savePosition(it, positionSeconds) }
+    }
+
     private fun pauseOnVpnLost() {
+        savePlaybackPosition()
         playing = false
         player?.pause()
         cancelNext()
