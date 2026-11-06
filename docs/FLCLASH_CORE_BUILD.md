@@ -35,10 +35,18 @@ bash scripts/build-official-flclash-core.sh
 ## 已确认与待完成
 
 - 已确认：官方 v0.9.3 可生成 `classes.jar`、ARMv7/ARM64 `libgojni.so`（Actions #42255934137）。
-- 首次官方 APK 编译在复制 AAR 时发现缺少忽略目录 `app/libs`，已添加 `mkdir -p`；后续结果以独立 Actions 为准。
-- 官方 SDK APK 静态构建仍未确认通过，且没有进行真机测试、DNS/IPv6 防泄漏认证。
+- 官方 APK 的 Lint、单元测试、编译与 ARM 原生库检查均已通过；构建工具已支持自动创建忽略目录 `app/libs`。
+- 官方 SDK APK 静态构建已通过独立 CI（Actions #42256808333），且没有进行真机测试、DNS/IPv6 防泄漏认证。
 - 默认发布签名和开源许可证符合性需在正式 Release 前继续核对。
 
 代码 GPL-3.0 授权要求保留对应源码、修改信息和许可。生成的 AAR 若分发，必须同步满足许可义务。
 
 > 这仅是官方源码构建流水线，不是已通过的官方后端迁移，也不保证该实验性工作流首次执行成功。实现的状态请看 [功能状态台账](FEATURE_STATUS.md)。
+
+## 固定源码与两个编译产物
+
+- 官方 FlClash v0.9.3：`be84736605527034689c95bf27828ff27d912c5e`。
+- 官方 Mihomo 子模块：`024245dc72bc92f48237f865119afe0cd53ac9e6`。
+- 构建脚本加入提交 SHA 校验，拒绝被移动的标签或异常子模块提交。
+- [官方 FlClash APK / AAR 编译成功的 Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/runs/42256808333)：可下载独立官方 Debug APK、AAR、校验值和 GPL 许可；这是开发测试产物，不是正式发布版。
+- [默认旧后端 APK Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml)：保留常规 CI 作为稳定可编译基线。

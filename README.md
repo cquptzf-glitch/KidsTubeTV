@@ -68,3 +68,5 @@
 - [当前实现、未完成任务与静态验收](docs/FEATURE_STATUS.md)
 
 **开发说明：** 已添加[官方 FlClash Core 独立编译与 APK 静态验证流水线](docs/FLCLASH_CORE_BUILD.md)，但常规 APK 仍使用原 Mihomo 封装；开发阶段的静态验收状态详见[功能台账](docs/FEATURE_STATUS.md)。
+
+**官方核心独立 APK：** [FlClash 官方 Go 后端构建成功的 Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/runs/42256808333) 已通过 Lint、单测与 APK 编译。默认 APK 仍用旧 Mihomo SDK；两个版本都未进行真实电视网络验收。
