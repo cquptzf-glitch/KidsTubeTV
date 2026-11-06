@@ -47,6 +47,22 @@ class YouTubeRepository(private val settings: SettingsStore) {
         return lookup(ids)
     }
 
+    /**
+     * Home combines a bounded set of approved channels and exact-approved
+     * videos. Every candidate still passes videos.list admission checks.
+     * Round-robin order keeps one prolific channel from dominating the UI.
+     */
+    fun homeFeed(): List<KidVideo> {
+        val sources = mutableListOf<List<KidVideo>>()
+        val exact = settings.approvedVideoIds.toList()
+        if (exact.isNotEmpty()) sources.add(lookup(exact.take(40)))
+        settings.allowedChannels.take(5).forEach { channel ->
+            // A deleted/unavailable channel should not hide other valid channels.
+            runCatching { uploads(channel) }.getOrNull()?.let(sources::add)
+        }
+        return HomeFeedMixer.interleave(sources, { it.id }, 48)
+    }
+
     /** 50 IDs per videos.list; avoids the 100-unit search quota for favorites/history. */
     fun lookup(videoIds: List<String>): List<KidVideo> {
         val validIds = videoIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }

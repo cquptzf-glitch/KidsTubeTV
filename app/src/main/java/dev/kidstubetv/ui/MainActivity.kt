@@ -88,8 +88,26 @@ class MainActivity : Activity() {
         }
     }
 
+    private var lastContentSignature = ""
+
+    private fun contentSignature() = listOf(
+        settings.channelsText,
+        settings.allowedVideosText,
+        settings.blockedVideosText,
+        settings.apiKey.isNotBlank().toString(),
+        settings.searchAllowed.toString(),
+        settings.dailyLimitMinutes.toString()
+    ).joinToString("|")
+
     override fun onResume() {
         super.onResume()
+        val signature = contentSignature()
+        if (signature != lastContentSignature) {
+            lastContentSignature = signature
+            loadedAfterConnection = false
+            buildDrawer()
+            showPlaceholder()
+        }
         updateVpnChrome()
         if (settings.proxyReady && !consentPending && !consentDeclined &&
             ProxyStatus.phase == ProxyStatus.Phase.OFF) requestVpn()
@@ -300,13 +318,8 @@ class MainActivity : Activity() {
 
     private fun loadDefault(force: Boolean = false) {
         if (!force && showCollectionKey == "home" && loadedAfterConnection) return
-        val first = settings.allowedChannels.firstOrNull()
-        if (first != null) {
-            loadCollection("home", "为你挑选") { YouTubeRepository(settings).uploads(first) }
-        } else {
-            loadCollection("home", "家长精选") {
-                YouTubeRepository(settings).lookup(settings.approvedVideoIds.toList())
-            }
+        loadCollection("home", "为你挑选") {
+            YouTubeRepository(settings).homeFeed()
         }
     }
 
