@@ -65,7 +65,7 @@ class MainActivity : Activity() {
             !settings.proxyReady) return@Runnable
         if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
             ProxyStatus.phase == ProxyStatus.Phase.STARTING) return@Runnable
-        requestVpn()
+        requestVpn(allowConsentDialog = false)
     }
     private val hideDrawerLater = Runnable { if (::drawer.isInitialized) hideDrawer() }
     private val networkPulse = object : Runnable {
@@ -589,14 +589,19 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    private fun requestVpn() {
+    private fun requestVpn(allowConsentDialog: Boolean = true) {
         if (VpnManualPause.isPaused) { updateVpnChrome(); return }
         if (!settings.proxyReady) { showPlaceholder(); return }
         if (consentPending || ProxyStatus.phase == ProxyStatus.Phase.READY ||
             ProxyStatus.phase == ProxyStatus.Phase.STARTING) return
         val intent = VpnService.prepare(this)
         if (intent == null) KidsVpnService.start(this)
-        else {
+        else if (!allowConsentDialog) {
+            // Revoked system permission must not be re-requested by an automatic
+            // retry loop. The parent can authorize from the bottom banner.
+            consentDeclined = true
+            updateVpnChrome()
+        } else {
             consentPending = true
             startActivityForResult(intent, REQUEST_VPN)
         }
