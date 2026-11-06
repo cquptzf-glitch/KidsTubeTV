@@ -8,6 +8,7 @@ import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import dev.kidstubetv.data.ApprovedPickerPolicy
 import dev.kidstubetv.data.GoogleTvAuth
 import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
@@ -170,9 +171,11 @@ class GoogleAccountActivity : Activity() {
             }
             .setNegativeButton("取消", null)
             .setPositiveButton("保存频道白名单") { _, _ ->
-                val old = settings.allowedChannels
-                val new = channels.filterIndexed { index, _ -> selected[index] }.map { it.channelId }
-                val updated = old + new
+                val displayed = channels.map { it.channelId }
+                val chosen = channels.filterIndexed { index, _ -> selected[index] }
+                    .map { it.channelId }
+                val updated = ApprovedPickerPolicy.apply(
+                    settings.allowedChannels, displayed, chosen)
                 settings.channelsText = updated.joinToString("\n")
                 status.text = "已批准 " + updated.size +
                     " 个频道。请返回儿童首页查看批准频道。"

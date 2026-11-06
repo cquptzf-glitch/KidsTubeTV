@@ -173,6 +173,9 @@ class SettingsActivity : Activity() {
         panel.addView(TvUi.button(this, "＋ 通过视频链接添加") {
             addVideoFromLink()
         })
+        panel.addView(TvUi.button(this, "查看 / 删除已批准视频") {
+            manageApprovedVideos()
+        })
         panel.addView(TvUi.button(this, "精确允许的视频 ID") {
             editLines("允许的视频 ID（每行 11 位）", store.allowedVideosText) {
                 store.allowedVideosText = it
@@ -402,6 +405,26 @@ class SettingsActivity : Activity() {
                 store.allowedVideosText = updated.joinToString("\n")
                 refreshSummaries()
                 childSummary.text = "已批准视频：${video.title}"
+            }.show()
+    }
+
+    private fun manageApprovedVideos() {
+        val ids = store.approvedVideoIds.sorted()
+        if (ids.isEmpty()) {
+            childSummary.text = "暂无单独批准的视频，可使用分享链接添加"
+            return
+        }
+        val selected = BooleanArray(ids.size) { true }
+        AlertDialog.Builder(this)
+            .setTitle("勾选要保留的视频")
+            .setMultiChoiceItems(ids.toTypedArray(), selected) { _, index, checked ->
+                selected[index] = checked
+            }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存视频白名单") { _, _ ->
+                store.allowedVideosText = ids.filterIndexed { index, _ -> selected[index] }
+                    .joinToString("\n")
+                refreshSummaries()
             }.show()
     }
 
