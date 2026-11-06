@@ -46,6 +46,7 @@ class PlayerActivity : Activity() {
     private var requestSerial = 0
     private var iframeReady = false
     private var approvedVideoId: String? = null
+    private var admissionPending = false
     private var player: YouTubePlayer? = null
     private var positionSeconds = 0f
     private var playing = false
@@ -84,7 +85,14 @@ class PlayerActivity : Activity() {
         }
     }
     private val vpnReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) = renderVpnStatus()
+        override fun onReceive(context: Context?, intent: Intent?) {
+            renderVpnStatus()
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE &&
+                approvedVideoId == null && !admissionPending && ids.isNotEmpty()) {
+                loadAt(position)
+            }
+        }
     }
 
     override fun onCreate(state: Bundle?) {
@@ -142,7 +150,8 @@ class PlayerActivity : Activity() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
                 player = youTubePlayer
                 iframeReady = true
-                if (ProxyStatus.phase == ProxyStatus.Phase.READY)
+                if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE)
                     approvedVideoId?.let { youTubePlayer.loadVideo(it, 0f) }
             }
 
@@ -190,10 +199,18 @@ class PlayerActivity : Activity() {
         handler.removeCallbacks(playbackTick)
         handler.postDelayed(playbackTick, 1000)
         renderVpnStatus()
+        // If admission was cancelled by a temporary activity/background
+        // transition, retry the same video only when the app VPN is ready.
+        if (!admissionPending && approvedVideoId == null &&
+            ids.isNotEmpty() && ProxyStatus.phase == ProxyStatus.Phase.READY &&
+            ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
+            loadAt(position)
+        }
     }
 
     override fun onStop() {
-        requestSerial++ // Stale async admission must not autoplay while backgrounded.
+        requestSerial++
+        admissionPending = false // Stale async admission must not autoplay while backgrounded.
         handler.removeCallbacks(playbackTick)
         handler.removeCallbacks(hideControls)
         cancelNext()
@@ -233,6 +250,7 @@ class PlayerActivity : Activity() {
         approvedVideoId = null
         player?.pause()
         val request = ++requestSerial
+        admissionPending = true
         videoTitle.text = "正在检查视频是否适合儿童…"
         Thread({
             val result = runCatching {
@@ -240,7 +258,9 @@ class PlayerActivity : Activity() {
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed || request != requestSerial) return@runOnUiThread
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                admissionPending = false
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
                     pauseOnVpnLost()
                     return@runOnUiThread
                 }
