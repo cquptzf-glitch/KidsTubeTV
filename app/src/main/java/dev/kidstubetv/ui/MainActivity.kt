@@ -18,6 +18,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.kidstubetv.data.KidCategories
+import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.YouTubeRepository
 import dev.kidstubetv.proxy.KidsVpnService
@@ -204,6 +205,7 @@ class MainActivity : Activity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("确定") { _, _ ->
                 if (store.verifyPin(pin.text.toString())) {
+                    ParentSession.unlock()
                     startActivity(Intent(this, SettingsActivity::class.java))
                 } else {
                     AlertDialog.Builder(this).setMessage("PIN 错误").setPositiveButton("确定", null).show()

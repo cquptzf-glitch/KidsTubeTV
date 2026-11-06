@@ -15,15 +15,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # GitHub ubuntu-latest has pre-installed Android SDK. Avoid setup-android v3
+      # which tries installing deprecated 'tools' and fails on newer SDK repos.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Install Android SDK API 36
-        run: sdkmanager "platforms;android-36"
-      - name: Download pinned Mihomo AAR with SHA-256 check
+      - name: Install Android SDK platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Download and verify pinned Mihomo AAR
         run: bash scripts/fetch-mihomo.sh
-      - name: Unit tests + APK
+      - name: Test and compile
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
