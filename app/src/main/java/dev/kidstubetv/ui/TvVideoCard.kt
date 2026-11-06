@@ -1,9 +1,8 @@
 package dev.kidstubetv.ui
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
+import android.text.TextUtils
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -11,54 +10,69 @@ import android.widget.TextView
 import com.bumptech.glide.Glide
 import dev.kidstubetv.data.KidVideo
 
-/** Focusable 16:9 card with thumbnail, title and owner, sized for 1080p Android TV. */
+/** Large 16:9 artwork, one remote focus target per video, no tiny action buttons. */
 object TvVideoCard {
-    fun make(activity: Activity, video: KidVideo, onClick: () -> Unit): View {
-        val width = TvUi.dp(activity, 236)
+    fun make(activity: Activity, video: KidVideo, onClick: () -> Unit): View =
+        make(activity, video, TvUi.dp(activity, 292), onClick)
+
+    fun make(activity: Activity, video: KidVideo, widthPixels: Int, onClick: () -> Unit): View {
+        val height = (widthPixels * 9f / 16f).toInt()
         val item = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             isFocusable = true
             isClickable = true
-            setPadding(TvUi.dp(activity, 9), TvUi.dp(activity, 9),
-                TvUi.dp(activity, 9), TvUi.dp(activity, 9))
+            clipChildren = false
+            clipToPadding = false
+            setPadding(TvUi.dp(activity, 3), TvUi.dp(activity, 3),
+                TvUi.dp(activity, 3), TvUi.dp(activity, 5))
             setOnClickListener { onClick() }
-            setOnFocusChangeListener { _, focused ->
-                background = shape(activity, focused)
-                scaleX = if (focused) 1.06f else 1f
-                scaleY = if (focused) 1.06f else 1f
-                elevation = if (focused) TvUi.dp(activity, 12).toFloat() else 0f
-            }
-            background = shape(activity, false)
         }
         val image = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = video.title
-            setBackgroundColor(TvUi.surface)
+            background = TvUi.rounded(activity, 0xFF2D4C54.toInt())
+            clipToOutline = true
         }
-        item.addView(image, LinearLayout.LayoutParams(-1, TvUi.dp(activity, 130)))
-        val title = TvUi.label(activity, video.title, 16f).apply {
+        val imageHolder = android.widget.FrameLayout(activity).apply {
+            background = cardShape(activity, false)
+            clipToOutline = true
+            setPadding(TvUi.dp(activity, 3), TvUi.dp(activity, 3),
+                TvUi.dp(activity, 3), TvUi.dp(activity, 3))
+            addView(image, android.widget.FrameLayout.LayoutParams(-1, -1))
+        }
+        item.addView(imageHolder, LinearLayout.LayoutParams(-1, height))
+        val title = TvUi.label(activity, video.title, 19f).apply {
             maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            ellipsize = TextUtils.TruncateAt.END
         }
         item.addView(title)
-        val channel = TvUi.label(activity, video.channelTitle, 13f).apply {
-            setTextColor(TvUi.muted)
+        item.addView(TvUi.label(activity, video.channelTitle, 13f).apply {
             maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(TvUi.muted)
+            setPadding(TvUi.dp(activity, 2), 0, 0, 0)
+        })
+        item.setOnFocusChangeListener { _, focused ->
+            imageHolder.background = cardShape(activity, focused)
+            title.setTextColor(if (focused) TvUi.warm else TvUi.text)
+            item.scaleX = if (focused) 1.035f else 1f
+            item.scaleY = if (focused) 1.035f else 1f
+            item.elevation = if (focused) TvUi.dp(activity, 10).toFloat() else 0f
         }
-        item.addView(channel)
         if (video.thumbnailUrl.startsWith("https://")) {
             Glide.with(activity).load(video.thumbnailUrl)
-                .placeholder(android.R.drawable.ic_media_play).centerCrop().into(image)
+                .placeholder(android.R.drawable.ic_media_play)
+                .centerCrop().into(image)
         }
-        item.layoutParams = LinearLayout.LayoutParams(width, TvUi.dp(activity, 232))
+        item.layoutParams = LinearLayout.LayoutParams(widthPixels, -2)
         return item
     }
 
-    private fun shape(activity: Activity, focus: Boolean) = GradientDrawable().apply {
-        setColor(if (focus) 0xFF1C655D.toInt() else TvUi.surface)
-        cornerRadius = TvUi.dp(activity, 14).toFloat()
-        setStroke(TvUi.dp(activity, if (focus) 3 else 1),
-            if (focus) TvUi.mint else 0xFF394C62.toInt())
-    }
+    private fun cardShape(activity: Activity, focused: Boolean): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(TvUi.surface)
+            cornerRadius = TvUi.dp(activity, 18).toFloat()
+            setStroke(TvUi.dp(activity, if (focused) 4 else 1),
+                if (focused) TvUi.warm else 0xFF3A5660.toInt())
+        }
 }
