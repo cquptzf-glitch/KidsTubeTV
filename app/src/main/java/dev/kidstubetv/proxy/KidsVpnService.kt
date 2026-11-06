@@ -40,6 +40,7 @@ class KidsVpnService : VpnService() {
             ACTION_STOP -> stopNow()
             ACTION_START -> if (active.compareAndSet(false, true)) {
                 failed = false
+                ProxyNetworkHealth.reset(this)
                 ensureForeground()
                 ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "Initializing Mihomo")
                 startCoreAsync()
@@ -94,6 +95,7 @@ class KidsVpnService : VpnService() {
                 "172.19.0.2/30", "1.1.1.1", 1400)
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
+            ProxyNetworkHealth.check(applicationContext)
             // Update only after the app-only VPN exists. New YAML takes effect next start.
             SubscriptionUpdater.updateIfDue(applicationContext)
         } catch (error: Throwable) {
@@ -135,6 +137,7 @@ class KidsVpnService : VpnService() {
             if (Clash.isLoaded()) Clash.setEventListener(null as io.github.oviron.libmihomo.InvokeInterface?)
         }
         if (!failed) ProxyStatus.update(this, ProxyStatus.Phase.OFF, "Disconnected")
+        ProxyNetworkHealth.reset(this)
         stopForeground(true)
         stopSelf()
     }
