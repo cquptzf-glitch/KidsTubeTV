@@ -57,6 +57,7 @@ class KidsVpnService : VpnService() {
     private val core: NativeProxyCore = NativeCoreFactory.create()
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
+    private var tunAttempted = false
     private var failed = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -122,8 +123,11 @@ class KidsVpnService : VpnService() {
                 .addAllowedApplication(packageName)
 
             val pfd = builder.establish() ?: error("System refused to establish VPN")
-            // Ownership of this FD transfers to Mihomo, which closes it in stopTun().
+            // Both Go backends own this detached FD once startTun is called.
+            // A failed or throwing native start may have partially installed
+            // socket hooks; stopTun must run even when no READY state was set.
             val fd = pfd.detachFd()
+            tunAttempted = true
             check(core.startTun(fd, tunCallbacks(sessionId))) {
                 "Native proxy core refused the TUN descriptor"
             }
@@ -165,11 +169,18 @@ class KidsVpnService : VpnService() {
             stopSelf()
             return
         }
-        runCatching {
-            if (tunStarted) core.stopTun()
-            tunStarted = false
+        val cleanup = runCatching {
+            if (tunAttempted) core.stopTun()
         }
-        if (!failed) ProxyStatus.update(this, ProxyStatus.Phase.OFF, "Disconnected")
+        tunStarted = false
+        tunAttempted = false
+        if (cleanup.isFailure) {
+            failed = true
+            ProxyStatus.update(this, ProxyStatus.Phase.ERROR,
+                "Native proxy cleanup failed")
+        } else if (!failed) {
+            ProxyStatus.update(this, ProxyStatus.Phase.OFF, "Disconnected")
+        }
         ProxyNetworkHealth.reset(this)
         stopForeground(true)
         stopSelf()
