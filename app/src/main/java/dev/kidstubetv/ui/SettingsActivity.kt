@@ -438,6 +438,7 @@ class SettingsActivity : Activity() {
             .setPositiveButton("允许播放") { _, _ ->
                 val updated = store.approvedVideoIds + video.id
                 store.allowedVideosText = updated.joinToString("\n")
+                store.rememberVideoName(video.id, video.title)
                 refreshSummaries()
                 childSummary.text = "已批准视频：${video.title}"
             }.show()
@@ -450,15 +451,20 @@ class SettingsActivity : Activity() {
             return
         }
         val selected = BooleanArray(ids.size) { true }
+        val titles = store.videoNames
+        val labels = ids.mapIndexed { index, id ->
+            titles[id]?.let { it + "  ·  " + id } ?: "视频 ${index + 1}  ·  " + id
+        }
         AlertDialog.Builder(this)
             .setTitle("勾选要保留的视频")
-            .setMultiChoiceItems(ids.toTypedArray(), selected) { _, index, checked ->
+            .setMultiChoiceItems(labels.toTypedArray(), selected) { _, index, checked ->
                 selected[index] = checked
             }
             .setNegativeButton("取消", null)
             .setPositiveButton("保存视频白名单") { _, _ ->
-                store.allowedVideosText = ids.filterIndexed { index, _ -> selected[index] }
-                    .joinToString("\n")
+                val kept = ids.filterIndexed { index, _ -> selected[index] }
+                store.allowedVideosText = kept.joinToString("\n")
+                store.forgetVideoNames(ids.filterNot { it in kept })
                 refreshSummaries()
             }.show()
     }
@@ -470,9 +476,13 @@ class SettingsActivity : Activity() {
             return
         }
         val enabled = BooleanArray(channels.size) { true }
+        val names = store.channelNames
+        val labels = channels.mapIndexed { index, id ->
+            names[id]?.let { it + "  ·  " + id } ?: "频道 ${index + 1}  ·  " + id
+        }
         AlertDialog.Builder(this)
             .setTitle("勾选保留的频道")
-            .setMultiChoiceItems(channels.toTypedArray(), enabled) { _, index, checked ->
+            .setMultiChoiceItems(labels.toTypedArray(), enabled) { _, index, checked ->
                 enabled[index] = checked
             }
             .setNegativeButton("取消", null)

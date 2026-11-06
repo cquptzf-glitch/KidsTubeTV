@@ -95,6 +95,37 @@ class SettingsStore(context: Context) {
         }
     }
 
+    val videoNames: Map<String, String>
+        get() {
+            val json = runCatching {
+                JSONObject(prefs.getString("video_names", "{}") ?: "{}")
+            }.getOrDefault(JSONObject())
+            return json.keys().asSequence().mapNotNull { key ->
+                if (!key.matches(Regex("[A-Za-z0-9_-]{11}"))) return@mapNotNull null
+                json.optString(key).takeIf(String::isNotBlank)?.let { key to it }
+            }.take(250).toMap()
+        }
+
+    /** Stores a display label, never the video's content or credentials. */
+    fun rememberVideoName(id: String, title: String) {
+        require(id.matches(Regex("[A-Za-z0-9_-]{11}"))) { "无效视频 ID" }
+        val label = ChannelLabelPolicy.clean(title)
+        if (label.isBlank()) return
+        synchronized(PROFILE_LOCK) {
+            val entries = videoNames.toMutableMap().apply { put(id, label) }
+                .entries.takeLast(250)
+            prefs.edit().putString("video_names",
+                JSONObject(entries.associate { it.key to it.value }).toString()).apply()
+        }
+    }
+
+    fun forgetVideoNames(ids: Collection<String>) = synchronized(PROFILE_LOCK) {
+        if (ids.isEmpty()) return@synchronized
+        val json = JSONObject(videoNames)
+        ids.forEach { json.remove(it) }
+        prefs.edit().putString("video_names", json.toString()).apply()
+    }
+
     val approvedChannels: Set<String> get() = tokenize(channelsText)
         .filter { it.matches(Regex("UC[A-Za-z0-9_-]{22}")) }.toSet()
     val allowedChannels: Set<String> get() = approvedChannels
