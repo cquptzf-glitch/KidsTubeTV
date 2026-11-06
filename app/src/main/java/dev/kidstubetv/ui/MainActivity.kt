@@ -27,6 +27,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import dev.kidstubetv.data.*
 import dev.kidstubetv.proxy.*
 
@@ -48,6 +50,10 @@ class MainActivity : Activity() {
     private var drawerFocus: View? = null
     private var showCollectionKey = "home"
     private var nextRequest = 0
+    private val catalogExecutor = Executors.newSingleThreadExecutor { job ->
+        Thread(job, "kids-catalog-io").apply { isDaemon = true }
+    }
+    private var catalogTask: Future<*>? = null
     private var loadedAfterConnection = false
     private var consentPending = false
     private var consentDeclined = false
@@ -118,6 +124,8 @@ class MainActivity : Activity() {
         unregisterReceiver(proxyReceiver)
         mainHandler.removeCallbacks(networkPulse)
         nextRequest++
+        catalogTask?.cancel(true)
+        catalogTask = null
         super.onStop()
     }
 
@@ -341,10 +349,13 @@ class MainActivity : Activity() {
             return
         }
         val request = ++nextRequest
+        catalogTask?.cancel(true)
         list.removeAllViews()
         list.addView(TvUi.label(this, "正在为你准备好看的视频…", 22f))
-        Thread({
+        catalogTask = catalogExecutor.submit {
+            if (Thread.currentThread().isInterrupted) return@submit
             val result = runCatching { loader() }
+            if (Thread.currentThread().isInterrupted) return@submit
             runOnUiThread {
                 if (isFinishing || request != nextRequest || !::list.isInitialized) return@runOnUiThread
                 if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
@@ -361,7 +372,7 @@ class MainActivity : Activity() {
                         list.addView(TvUi.label(this, error.message.orEmpty().take(120), 14f))
                     }
             }
-        }, "kids-immersive-collection").start()
+        }
     }
 
     private fun renderCollection(name: String, videos: List<KidVideo>) {
@@ -549,6 +560,8 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideDrawerLater)
         mainHandler.removeCallbacks(networkPulse)
+        catalogTask?.cancel(true)
+        catalogExecutor.shutdownNow()
         super.onDestroy()
     }
 
