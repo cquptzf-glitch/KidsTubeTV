@@ -21,7 +21,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Android user-consented VPN. Only this package is routed into TUN; the rest of the
  * TV keeps its normal connection. No root, private API, or global VPN changes.
  */
-class KidsVpnService : VpnService(), TunInterface {
+class KidsVpnService : VpnService() {
+    // Android VpnService.protect(fd): Boolean conflicts with TunInterface.protect(fd): Unit.
+    // Bridge them through a dedicated callback object, never direct inheritance.
+    private val tunCallbacks = object : TunInterface {
+        override fun protect(fd: Int) {
+            this@KidsVpnService.protect(fd)
+        }
+        override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
+    }
     private val active = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
@@ -78,7 +86,7 @@ class KidsVpnService : VpnService(), TunInterface {
             val pfd = builder.establish() ?: error("System refused to establish VPN")
             // Ownership of this FD transfers to Mihomo, which closes it in stopTun().
             val fd = pfd.detachFd()
-            Clash.startTUN(fd, this, "kidstubetv", "system",
+            Clash.startTUN(fd, tunCallbacks, "kidstubetv", "system",
                 "172.19.0.2/30", "1.1.1.1", 1400)
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
@@ -86,13 +94,6 @@ class KidsVpnService : VpnService(), TunInterface {
             fail(error.message ?: "Unable to start TUN")
         }
     }
-
-    /** Avoid loops: outbound Mihomo connections must bypass the same VPN. */
-    override fun protect(fd: Int) {
-        super.protect(fd)
-    }
-
-    override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int): String = ""
 
     private fun ensureForeground() {
         val manager = getSystemService(NotificationManager::class.java)
