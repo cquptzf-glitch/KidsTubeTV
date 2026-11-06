@@ -73,6 +73,9 @@ class GoogleTvAuth(context: Context) {
                 "device_code" to challenge.code,
                 "grant_type" to "urn:ietf:params:oauth:grant-type:device_code",
             ))
+            // Cancellation can race with a blocking HTTP token request:
+            // never store an OAuth credential after the parent dismissed pairing.
+            if (cancelled.get() || System.currentTimeMillis() >= challenge.expiresAt) return
             if (status in 200..299 && response.has("access_token")) {
                 val refresh = response.optString("refresh_token")
                 if (refresh.isNotBlank()) secret.put("oauth_refresh_token", refresh)
