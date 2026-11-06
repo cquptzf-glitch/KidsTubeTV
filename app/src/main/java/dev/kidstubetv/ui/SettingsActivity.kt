@@ -37,60 +37,91 @@ class SettingsActivity : Activity() {
         body.addView(TvUi.label(this, "家长控制 / 代理设置", 28f, true))
         body.addView(TvUi.label(this, "只有批准频道或视频且满足儿童及嵌入条件的内容可以播放。", 17f))
         TvUi.space(body, this)
-        body.addView(TvUi.label(this, "Clash / Mihomo 订阅地址（HTTPS YAML）", 18f, true))
+
+        // Remote-friendly parent hub: three large categories; hide all input-heavy
+        // settings unless the parent explicitly navigates into that section.
+        val childPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val networkPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val accountPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val categories = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val panels = listOf(childPanel, networkPanel, accountPanel)
+        val categoryButtons = mutableListOf<android.widget.Button>()
+        fun selectPanel(index: Int) {
+            panels.forEachIndexed { i, panel -> panel.visibility = if (i == index) android.view.View.VISIBLE else android.view.View.GONE }
+            categoryButtons.forEachIndexed { i, button ->
+                button.alpha = if (i == index) 1f else 0.68f
+            }
+            screen.post { screen.smoothScrollTo(0, 0) }
+        }
+        listOf("✦  儿童内容", "◈  网络代理", "◉  YouTube 账号")
+            .forEachIndexed { index, title ->
+                val button = TvUi.button(this, title) { selectPanel(index) }
+                categoryButtons.add(button)
+                categories.addView(button, LinearLayout.LayoutParams(0, TvUi.dp(this, 58), 1f).apply {
+                    rightMargin = TvUi.dp(this@SettingsActivity, 10)
+                })
+            }
+        body.addView(categories)
+        TvUi.space(body, this, 10)
+        message = TvUi.label(this, stateText(), 15f).apply { setTextColor(TvUi.muted) }
+        body.addView(message)
+        TvUi.space(body, this, 10)
+        body.addView(childPanel)
+        body.addView(networkPanel)
+        body.addView(accountPanel)
+        selectPanel(0)
+        networkPanel.addView(TvUi.label(this, "Clash / Mihomo 订阅地址（HTTPS YAML）", 18f, true))
         subscription = TvUi.input(this, "https://.../subscription?token=...", store.subscriptionUrl)
-        body.addView(subscription)
-        body.addView(TvUi.button(this, "保存订阅地址并立即更新") { saveSubscriptionAndFetch() })
+        networkPanel.addView(subscription)
+        networkPanel.addView(TvUi.button(this, "保存订阅地址并立即更新") { saveSubscriptionAndFetch() })
         TvUi.space(body, this)
-        body.addView(TvUi.label(this, "自动更新周期", 17f))
+        networkPanel.addView(TvUi.label(this, "自动更新周期", 17f))
         refreshSpinner = spinner(body, listOf("关闭", "每 6 小时", "每 24 小时", "每 72 小时", "每 7 天"),
             listOf(0,6,24,72,168).indexOf(store.subscriptionIntervalHours).coerceAtLeast(0))
-        body.addView(TvUi.button(this, "从 U 盘导入完整 Mihomo YAML") {
+        networkPanel.addView(TvUi.button(this, "从 U 盘导入完整 Mihomo YAML") {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
             }, REQUEST_PROFILE)
         })
-        body.addView(TvUi.button(this, "节点选择 / 延迟测试 / 流量") {
+        networkPanel.addView(TvUi.button(this, "节点选择 / 延迟测试 / 流量") {
             startActivity(Intent(this, ProxyActivity::class.java))
         })
         TvUi.space(body, this)
-        body.addView(TvUi.button(this, "Google / YouTube 账号（可选登录）") {
+        accountPanel.addView(TvUi.button(this, "Google / YouTube 账号（可选登录）") {
             startActivity(Intent(this, GoogleAccountActivity::class.java))
         })
-        body.addView(TvUi.label(this,
+        accountPanel.addView(TvUi.label(this,
             "登录需 Google Cloud 的 TV OAuth 客户端；仅用于导入家长订阅频道，不会自动批准。", 15f))
         TvUi.space(body, this)
-        body.addView(TvUi.label(this, "YouTube Data API v3 Key", 18f, true))
+        childPanel.addView(TvUi.label(this, "YouTube Data API v3 Key", 18f, true))
         api = TvUi.input(this, "Google Cloud API Key", store.apiKey)
         api.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        body.addView(api)
-        body.addView(TvUi.label(this, "批准的频道 ID，每行一个 UC...", 18f))
+        childPanel.addView(api)
+        childPanel.addView(TvUi.label(this, "批准的频道 ID，每行一个 UC...", 18f))
         channels = TvUi.input(this, "UCxxxxxxxxxxxxxxxxxxxxxx", store.channelsText, true)
-        body.addView(channels)
-        body.addView(TvUi.label(this, "额外批准的视频 ID（每行一个）", 18f))
+        childPanel.addView(channels)
+        childPanel.addView(TvUi.label(this, "额外批准的视频 ID（每行一个）", 18f))
         allowed = TvUi.input(this, "11 位视频 ID", store.allowedVideosText, true)
-        body.addView(allowed)
-        body.addView(TvUi.label(this, "禁止的视频 ID（禁止优先）", 18f))
+        childPanel.addView(allowed)
+        childPanel.addView(TvUi.label(this, "禁止的视频 ID（禁止优先）", 18f))
         blocked = TvUi.input(this, "11 位视频 ID", store.blockedVideosText, true)
-        body.addView(blocked)
+        childPanel.addView(blocked)
         searchSwitch = Switch(this).apply {
             text = "允许儿童搜索（仍只显示白名单）"
             setTextColor(-1)
             textSize = 17f
             isChecked = store.searchAllowed
         }
-        body.addView(searchSwitch)
-        body.addView(TvUi.label(this, "每日观看时间", 17f))
+        childPanel.addView(searchSwitch)
+        childPanel.addView(TvUi.label(this, "每日观看时间", 17f))
         val limits = listOf(15,20,30,45,60,90,120)
         limitSpinner = spinner(body, limits.map { "$it 分钟" },
             limits.indexOf(store.dailyLimitMinutes).coerceAtLeast(0))
         TvUi.space(body, this)
-        message = TvUi.label(this, stateText(), 16f)
-        body.addView(message)
-        body.addView(TvUi.button(this, "保存所有设置") { saveFields() })
-        body.addView(TvUi.button(this, "设置 / 修改家长 PIN") { pinDialog(false) })
-        body.addView(TvUi.button(this, "清空本地历史与收藏") {
+        childPanel.addView(TvUi.button(this, "保存所有设置") { saveFields() })
+        childPanel.addView(TvUi.button(this, "设置 / 修改家长 PIN") { pinDialog(false) })
+        childPanel.addView(TvUi.button(this, "清空本地历史与收藏") {
             AlertDialog.Builder(this).setMessage("确定删除所有本地历史和收藏？")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("清空") { _, _ ->
@@ -98,7 +129,7 @@ class SettingsActivity : Activity() {
                     message.text = "已清空"
                 }.show()
         })
-        body.addView(TvUi.button(this, "返回首页") { finish() })
+        childPanel.addView(TvUi.button(this, "返回首页") { finish() })
         if (!store.hasPin) pinDialog(true)
     }
 
