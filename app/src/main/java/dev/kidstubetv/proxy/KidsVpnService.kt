@@ -94,6 +94,8 @@ class KidsVpnService : VpnService() {
                 "172.19.0.2/30", "1.1.1.1", 1400)
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
+            // Update only after the app-only VPN exists. New YAML takes effect next start.
+            SubscriptionUpdater.updateIfDue(applicationContext)
         } catch (error: Throwable) {
             fail(error.message ?: "Unable to start TUN")
         }
