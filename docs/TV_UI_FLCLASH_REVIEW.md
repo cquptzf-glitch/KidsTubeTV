@@ -93,3 +93,27 @@ KidsTubeTV 当前引用的是 <https://github.com/oviron/libmihomo-android> 的 
 5. 手机配置配网页（**独立需求**）：仅局域网开放、短时配对码、一次性授权、节点/订阅/白名单编辑，默认完全关闭。
 
 上述为源码核查与方案设计；**尚未替换 KidsTubeTV 当前的 AAR、运行过 FlClash 源码构建或将 HTML 布局移植到 Kotlin**。
+
+
+## 七、2026-11-06 后续落地状态
+
+本轮已向 `main` 分别提交以下原创实现：
+
+- `MainActivity.kt`：沉浸式主推荐、三列大卡片、左键/菜单键呼出、闲置自动隐藏侧栏；VPN 底部故障条。
+- `TvUi.kt`、`TvVideoCard.kt`：柔和墨蓝/海玻璃绿/暖黄焦点统一视觉（上一轮已经完成）。
+- `PlayerActivity.kt`：播放全屏、方向键快进/快退、上键呼出自动隐藏控制栏、播放器底部 VPN 故障条和 OK 返回；仍逐视频二次白名单校验与观看时间限制。
+- `SettingsActivity.kt`：家长设置分为「儿童内容」「网络代理」「YouTube 账号」三个大入口，仅展示选中的部分，原有高级字段仍可访问。
+- `ProxyNetworkHealth.kt`：实际 HTTPS 连通性探测；两次连续失败提醒“VPN 已建立但 Google 不可达”。它**不证明** DNS/IPv6/QUIC 完全不泄漏，也不能代替 Android 锁定 VPN 模式。
+- `NativeProxyCore.kt`：`NativeProxyCore` 接口与 `CurrentMihomoAarCore` 适配器，用于日后替换上游 Android 核心实现。
+
+### 与官方 FlClash 的真实关系
+
+当前 APK 仍采用 `oviron/libmihomo-android` v0.3.13 AAR，并非 `chen08209/FlClash` 官方 Android `android/core`/Go mobile 构建。只是内置的代理协议执行引擎同样为 Mihomo。引入 `NativeProxyCore` 是可迁移接口，**没有声称已替换为官方 FlClash**。
+
+下一阶段迁移若选用官方实现，需要固定官方 git commit、保留 GPL 许可，构建 Go/gomobile/NDK 原生库，适配 `Core.startTun()`/回调及配置 API，再在 Android 9 TV 上专项验证 DNS、IPv6、VPN 抢占、节点重连、退出释放等。当前工程的 UI 并不依赖 FlClash Flutter。
+
+### 验证分层
+
+1. **已进行**：GitHub CI Kotlin 编译与纯单元测试（以对应最新 commit 的实际 Actions 状态为准）。
+2. **未进行**：用户雷鸟 TV 实机网络/播放验收，包括 Android 9 系统 WebView、Google OAuth、真实 Clash 订阅、多节点、IPv6/UDP、家长 PIN 可用性、遥控器焦点兼容、VPN 中断/后台退出。
+3. **未完成**：真实网络 fail-closed 保证、官方 FlClash 完整核心迁移、手机扫码/配对配置管理；这三项不可用 HTML Demo 或编译通过替代。
