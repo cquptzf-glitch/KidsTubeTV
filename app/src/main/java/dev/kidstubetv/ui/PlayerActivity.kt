@@ -50,6 +50,7 @@ class PlayerActivity : Activity() {
     private var player: YouTubePlayer? = null
     private var positionSeconds = 0f
     private var lastSavedSecond = 0f
+    private var completedVideoId: String? = null
     private var playing = false
     private var lastRecordedVideo: String? = null
     private var autoNext: Runnable? = null
@@ -170,6 +171,7 @@ class PlayerActivity : Activity() {
                     scheduleAutoHide()
                 }
                 if (state == PlayerConstants.PlayerState.ENDED) {
+                    completedVideoId = approvedVideoId
                     approvedVideoId?.let { history.clearPosition(it) }
                     lastSavedSecond = 0f
                     scheduleNext()
@@ -260,6 +262,7 @@ class PlayerActivity : Activity() {
         savePlaybackPosition()
         position = newPosition
         approvedVideoId = null
+        completedVideoId = null
         positionSeconds = 0f
         lastSavedSecond = 0f
         player?.pause()
@@ -330,7 +333,9 @@ class PlayerActivity : Activity() {
     }
 
     private fun savePlaybackPosition() {
-        approvedVideoId?.let { history.savePosition(it, positionSeconds) }
+        approvedVideoId?.takeIf { it != completedVideoId }?.let {
+            history.savePosition(it, positionSeconds)
+        }
     }
 
     private fun pauseOnVpnLost() {
