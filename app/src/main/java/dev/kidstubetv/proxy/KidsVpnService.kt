@@ -27,7 +27,7 @@ class KidsVpnService : VpnService() {
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
     }
-    private val core: NativeProxyCore = CurrentMihomoAarCore()
+    private val core: NativeProxyCore = NativeCoreFactory.create()
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
     private var failed = false
@@ -88,16 +88,18 @@ class KidsVpnService : VpnService() {
         try {
             val builder = Builder()
                 .setSession("KidsTubeTV")
-                .setMtu(1400)
-                .addAddress("172.19.0.2", 30)
+                .setMtu(core.tunMtu)
+                .addAddress(core.tunAddress, 30)
                 .addRoute("0.0.0.0", 0)
-                .addDnsServer("1.1.1.1")
+                .addDnsServer(core.tunDns)
                 .addAllowedApplication(packageName)
 
             val pfd = builder.establish() ?: error("System refused to establish VPN")
             // Ownership of this FD transfers to Mihomo, which closes it in stopTun().
             val fd = pfd.detachFd()
-            core.startTun(fd, tunCallbacks(sessionId))
+            check(core.startTun(fd, tunCallbacks(sessionId))) {
+                "Native proxy core refused the TUN descriptor"
+            }
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
             ProxyNetworkHealth.check(applicationContext)

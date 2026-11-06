@@ -1,3 +1,7 @@
+
+val kidsTubeOfficialCore = providers.gradleProperty("kidsTubeOfficialCore")
+    .map(String::toBoolean).getOrElse(false)
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +9,11 @@ plugins {
 
 android {
     namespace = "dev.kidstubetv"
+    sourceSets {
+        getByName("main").java.srcDir(
+            if (kidsTubeOfficialCore) "src/official/java" else "src/legacy/java"
+        )
+    }
     compileSdk = 36
     defaultConfig {
         applicationId = "dev.kidstubetv"
@@ -54,7 +63,13 @@ dependencies {
     implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:13.0.0")
 
     // GPLv3 Mihomo Android bridge. Run scripts/fetch-mihomo.sh or .ps1 before build.
-    implementation(files("libs/libmihomo-android-v0.3.13.aar"))
+    // Build with -PkidsTubeOfficialCore=true after generating the FlClash AAR.
+    // Exactly one JNI backend is packaged; no duplicate native libraries.
+    if (kidsTubeOfficialCore) {
+        implementation(files("libs/flclash-core-v0.9.3.aar"))
+    } else {
+        implementation(files("libs/libmihomo-android-v0.3.13.aar"))
+    }
 
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation("org.yaml:snakeyaml:2.7")
