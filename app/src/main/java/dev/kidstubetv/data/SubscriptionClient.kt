@@ -21,10 +21,7 @@ object SubscriptionFormat {
     }
 
     fun validateYaml(value: String) {
-        require(value.length in 12..MAX_PROFILE_BYTES) { "配置应在 12 B 至 1 MiB 之间" }
-        require(sources.containsMatchIn(value) && !value.trimStart().startsWith("<")) {
-            "该链接未返回 Clash/Mihomo YAML。Base64/V2Ray 节点列表暂不支持"
-        }
+        ClashProfilePolicy.validate(value)
     }
 
     const val MAX_PROFILE_BYTES = 1_048_576
