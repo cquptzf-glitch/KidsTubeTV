@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -24,6 +25,15 @@ import dev.kidstubetv.proxy.ProxyStatus
  * URLs, profile contents, access tokens or video history appear in the report.
  */
 class DiagnosticsActivity : Activity() {
+    /** Consume an expired parent's remote event before it reaches a sensitive button. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !ParentSession.onInteraction()) {
+            finish()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     /** Every remote action is gated by the recent parent PIN session. */
     override fun onUserInteraction() {
         super.onUserInteraction()

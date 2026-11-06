@@ -3,6 +3,7 @@ package dev.kidstubetv.ui
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.view.KeyEvent
 import android.text.InputType
 import android.widget.EditText
 import android.widget.ScrollView
@@ -23,6 +24,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Importing follows requires explicit parental selection, never blanket approval.
  */
 class GoogleAccountActivity : Activity() {
+    /** Consume an expired parent's remote event before it reaches a sensitive button. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !ParentSession.onInteraction()) {
+            finish()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     /** Every remote action is gated by the recent parent PIN session. */
     override fun onUserInteraction() {
         super.onUserInteraction()

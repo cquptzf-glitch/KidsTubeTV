@@ -3,6 +3,7 @@ package dev.kidstubetv.ui
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -19,6 +20,15 @@ import dev.kidstubetv.proxy.ProxyStatus
  * not part of the child's everyday viewing navigation.
  */
 class ProxyActivity : Activity() {
+    /** Consume an expired parent's remote event before it reaches a sensitive button. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !ParentSession.onInteraction()) {
+            finish()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     /** Every remote action is gated by the recent parent PIN session. */
     override fun onUserInteraction() {
         super.onUserInteraction()

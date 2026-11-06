@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -44,6 +45,15 @@ import java.util.Date
  * subscription URLs are only shown while explicitly editing behind PIN.
  */
 class SettingsActivity : Activity() {
+    /** Consume an expired parent's remote event before it reaches a sensitive button. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && store.hasPin && !ParentSession.onInteraction()) {
+            finish()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     /** Every remote action is gated by the recent parent PIN session. */
     override fun onUserInteraction() {
         super.onUserInteraction()
@@ -645,6 +655,7 @@ class SettingsActivity : Activity() {
             .setView(editor)
             .setPositiveButton("保存", null)
             .setNegativeButton("取消") { _, _ -> if (initial) finish() }
+            .setCancelable(!initial)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
