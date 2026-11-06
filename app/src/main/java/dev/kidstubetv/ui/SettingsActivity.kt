@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -28,6 +29,7 @@ import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
 import dev.kidstubetv.data.SubscriptionFormat
+import dev.kidstubetv.data.ClipboardSubscriptionPolicy
 import dev.kidstubetv.data.WatchHistory
 import dev.kidstubetv.data.WatchTime
 import dev.kidstubetv.proxy.KidsVpnService
@@ -469,13 +471,35 @@ class SettingsActivity : Activity() {
     }
 
     private fun editSubscription() {
+        // Read clipboard ONLY from a parent-initiated click. Never render a
+        // subscription token on a TV screen shared with children or guests.
+        val clipboardText = runCatching {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.primaryClip?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+        }.getOrDefault("")
+        val candidate = ClipboardSubscriptionPolicy.candidate(clipboardText, store.subscriptionUrl)
+        if (candidate == null) {
+            manuallyEditSubscription()
+            return
+        }
+        val provider = runCatching { URI(candidate).host }.getOrNull() ?: "订阅服务"
+        AlertDialog.Builder(this)
+            .setTitle("从剪贴板添加 Clash 订阅？")
+            .setMessage("已发现来自 $provider 的 HTTPS 链接。为保护订阅密钥，不会显示完整地址。")
+            .setPositiveButton("使用此订阅") { _, _ -> downloadSubscription(candidate, saveNewUrl = true) }
+            .setNeutralButton("手动输入") { _, _ -> manuallyEditSubscription() }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun manuallyEditSubscription() {
         editValue(
             "Clash / Mihomo 订阅地址",
             store.subscriptionUrl,
             hint = "https://example.com/subscription?token=...",
         ) { input ->
             val url = SubscriptionFormat.normalizeUrl(input)
-            // Commit URL only after new content is downloaded and persisted.
             downloadSubscription(url, saveNewUrl = true)
         }
     }
