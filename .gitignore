@@ -1,0 +1,18 @@
+# Android Studio / Gradle
+.gradle/
+.idea/
+*.iml
+build/
+**/build/
+local.properties
+captures/
+*.apk
+*.aab
+*.jks
+*.keystore
+# Never commit proxy subscriptions, YouTube credentials or native binaries
+app/libs/
+secrets/
+*.yaml
+*.yml
+*.env
