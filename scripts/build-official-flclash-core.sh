@@ -10,8 +10,12 @@ OUT="$ROOT/dist/flclash-core"
 mkdir -p "$OUT"
 rm -rf "$WORK"
 git clone --depth 1 --branch "$FLCLASH_TAG" https://github.com/chen08209/FlClash.git "$WORK"
-git -C "$WORK" config --local url."https://github.com/".insteadOf "git@github.com:"
-git -C "$WORK" submodule update --init --recursive core/Clash.Meta
+# FlClash's .gitmodules uses an SSH-only URL, but CI has no SSH key.
+# Change only the disposable checkout (not the upstream source revision).
+git -C "$WORK" submodule set-url core/Clash.Meta \
+  https://github.com/chen08209/Clash.Meta.git
+git -C "$WORK" -c url.https://github.com/.insteadOf=git@github.com: \
+  submodule update --init --recursive core/Clash.Meta
 GIT_SHA="$(git -C "$WORK" rev-parse HEAD)"
 MIHOMO_SHA="$(git -C "$WORK/core/Clash.Meta" rev-parse HEAD)"
 echo "FlClash source: $FLCLASH_TAG @ $GIT_SHA"
