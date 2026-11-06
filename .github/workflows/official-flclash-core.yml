@@ -42,6 +42,7 @@ jobs:
         run: bash scripts/build-official-flclash-core.sh
       - name: Compile, lint and unit-test official core variant (no TV required)
         run: |
+          mkdir -p app/libs
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
           gradle --no-daemon -PkidsTubeOfficialCore=true \
             :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
