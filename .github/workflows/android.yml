@@ -25,6 +25,8 @@ jobs:
           SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
           "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Static syntax check for core build scripts
+        run: bash -n scripts/fetch-mihomo.sh scripts/build-official-flclash-core.sh
       - name: Download and verify pinned Mihomo AAR
         run: bash scripts/fetch-mihomo.sh
       - name: Lint, test and compile

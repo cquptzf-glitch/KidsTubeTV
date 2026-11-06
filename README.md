@@ -12,7 +12,7 @@
 - **儿童保护：** 频道 ID 白名单、单视频白名单、禁止列表；YouTube Data API `madeForKids`、`embeddable` 检查，播放前再次复核
 - **家长设置：** PIN（PBKDF2-SHA256 + 连续错误暂时锁定），儿童搜索开关、15–120 分钟每日观看限制、历史/收藏清除
 - **极简 Clash 设置：** 默认只显示连接状态和「添加/更换订阅」「选择节点」两项；订阅 URL 在弹窗中输入，U 盘导入、自动更新周期、测速、流量统计等隐藏在高级功能。支持 HTTPS Clash/Mihomo YAML 和配置备份，更新配置在下次连接时生效
-- **节点管理：** Mihomo Selector 代理组选节点、当前节点延迟测试、流量查询
+- **节点管理：** Mihomo Selector 代理组选节点、当前节点延迟测试、流量查询；节点选择可在下次启动时恢复
 - **应用专属 VPN：** 无需 Root；首次弹系统授权，打开应用后自动启用 VPN，显式退出立刻断开，Home 键退后台约 6 秒断开，不接管其他应用路由
 - **Google 登录（可选）：** 官方 TV OAuth 设备码授权，通过手机登录，读取登录账户的 YouTube 订阅；**只有家长勾选的频道**才加入白名单
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
@@ -66,3 +66,5 @@
 ## 功能闭环台账
 
 - [当前实现、未完成任务与静态验收](docs/FEATURE_STATUS.md)
+
+**开发说明：** 目前已添加[官方 FlClash Core 源码构建实验](docs/FLCLASH_CORE_BUILD.md)，但 APK 尚未切换至官方内核；开发阶段的静态验收状态详见[功能台账](docs/FEATURE_STATUS.md)。
