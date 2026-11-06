@@ -74,7 +74,7 @@ class SettingsActivity : Activity() {
         subscription = TvUi.input(this, "https://.../subscription?token=...", store.subscriptionUrl)
         networkPanel.addView(subscription)
         networkPanel.addView(TvUi.button(this, "保存订阅地址并立即更新") { saveSubscriptionAndFetch() })
-        TvUi.space(body, this)
+        TvUi.space(networkPanel, this)
         networkPanel.addView(TvUi.label(this, "自动更新周期", 17f))
         refreshSpinner = spinner(body, listOf("关闭", "每 6 小时", "每 24 小时", "每 72 小时", "每 7 天"),
             listOf(0,6,24,72,168).indexOf(store.subscriptionIntervalHours).coerceAtLeast(0))
@@ -87,13 +87,13 @@ class SettingsActivity : Activity() {
         networkPanel.addView(TvUi.button(this, "节点选择 / 延迟测试 / 流量") {
             startActivity(Intent(this, ProxyActivity::class.java))
         })
-        TvUi.space(body, this)
+        TvUi.space(networkPanel, this)
         accountPanel.addView(TvUi.button(this, "Google / YouTube 账号（可选登录）") {
             startActivity(Intent(this, GoogleAccountActivity::class.java))
         })
         accountPanel.addView(TvUi.label(this,
             "登录需 Google Cloud 的 TV OAuth 客户端；仅用于导入家长订阅频道，不会自动批准。", 15f))
-        TvUi.space(body, this)
+        TvUi.space(accountPanel, this)
         childPanel.addView(TvUi.label(this, "YouTube Data API v3 Key", 18f, true))
         api = TvUi.input(this, "Google Cloud API Key", store.apiKey)
         api.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -118,7 +118,7 @@ class SettingsActivity : Activity() {
         val limits = listOf(15,20,30,45,60,90,120)
         limitSpinner = spinner(body, limits.map { "$it 分钟" },
             limits.indexOf(store.dailyLimitMinutes).coerceAtLeast(0))
-        TvUi.space(body, this)
+        TvUi.space(childPanel, this)
         childPanel.addView(TvUi.button(this, "保存所有设置") { saveFields() })
         childPanel.addView(TvUi.button(this, "设置 / 修改家长 PIN") { pinDialog(false) })
         childPanel.addView(TvUi.button(this, "清空本地历史与收藏") {
