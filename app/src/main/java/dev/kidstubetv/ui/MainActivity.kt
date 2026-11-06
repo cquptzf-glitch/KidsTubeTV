@@ -282,6 +282,8 @@ class MainActivity : Activity() {
             })
         } else if (ProxyStatus.phase == ProxyStatus.Phase.STARTING) {
             list.addView(TvUi.label(this, "正在准备网络连接…", 20f))
+        } else if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+            list.addView(TvUi.label(this, "网络暂时不可用，请使用底部提示检测连接。", 20f))
         } else {
             list.addView(TvUi.primaryButton(this, "开始观看") { loadDefault(force = true) }.apply {
                 tag = "menu-edge"
@@ -314,7 +316,8 @@ class MainActivity : Activity() {
             showPlaceholder()
             return
         }
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
             showPlaceholder()
             updateVpnChrome()
             return
@@ -331,7 +334,12 @@ class MainActivity : Activity() {
             val result = runCatching { loader() }
             runOnUiThread {
                 if (isFinishing || request != nextRequest || !::list.isInitialized) return@runOnUiThread
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY) return@runOnUiThread
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+                    showPlaceholder()
+                    updateVpnChrome()
+                    return@runOnUiThread
+                }
                 result.onSuccess { renderCollection(name, it) }
                     .onFailure { error ->
                         list.removeAllViews()
