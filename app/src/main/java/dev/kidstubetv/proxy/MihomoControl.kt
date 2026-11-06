@@ -48,18 +48,5 @@ object MihomoControl {
         }.onFailure { main.post { done(Result.failure(it)) } }
     }
 
-    fun parseGroups(raw: String): List<ProxyGroup> {
-        val outer = JSONObject(raw)
-        val map = outer.optJSONObject("proxies") ?: return emptyList()
-        return map.keys().asSequence().mapNotNull { key ->
-            val obj = map.optJSONObject(key) ?: return@mapNotNull null
-            val nodes = obj.optJSONArray("all") ?: return@mapNotNull null
-            val type = obj.optString("type")
-            if (!type.equals("Selector", ignoreCase = true) && !type.equals("select", ignoreCase = true)) {
-                return@mapNotNull null
-            }
-            val names = (0 until nodes.length()).mapNotNull { nodes.optString(it).takeIf(String::isNotBlank) }
-            ProxyGroup(key, obj.optString("now"), names)
-        }.sortedBy(ProxyGroup::name).toList()
-    }
+    fun parseGroups(raw: String): List<ProxyGroup> = ProxyGroupsParser.parse(raw)
 }
