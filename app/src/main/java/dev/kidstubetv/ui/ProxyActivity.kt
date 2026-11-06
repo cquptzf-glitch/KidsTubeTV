@@ -108,7 +108,15 @@ class ProxyActivity : Activity() {
                         state.text = "正在切换：" + selected
                         MihomoControl.select(group.name, selected) { result ->
                             if (isFinishing || isDestroyed) return@select
-                            result.onSuccess { load() }
+                            result.onSuccess {
+                                runCatching {
+                                    SettingsStore(this@ProxyActivity)
+                                        .rememberProxySelection(group.name, selected)
+                                }.onFailure {
+                                    state.text = "已切换节点，但未能保存下次启动的选择"
+                                }
+                                load()
+                            }
                                 .onFailure { state.text = "切换失败：" + (it.message ?: "未知错误") }
                         }
                     }

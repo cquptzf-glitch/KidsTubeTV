@@ -450,6 +450,8 @@ class SettingsActivity : Activity() {
                 store.writeProfile(yaml)
                 if (saveNewUrl) {
                     try {
+                        // A new provider's group names may not match old selections.
+                        if (store.subscriptionUrl != url) store.clearProxySelections()
                         store.subscriptionUrl = url
                     } catch (error: Exception) {
                         store.restoreBackup()
@@ -578,6 +580,9 @@ class SettingsActivity : Activity() {
                         store.writeProfile(output.toString(Charsets.UTF_8.name()))
                     }
                     store.subscriptionUpdatedAt = System.currentTimeMillis()
+                    // Imported local YAML supersedes any previously scheduled URL refresh.
+                    store.subscriptionUrl = ""
+                    store.clearProxySelections()
                 }
             } finally {
                 dev.kidstubetv.proxy.SubscriptionUpdateGate.release()

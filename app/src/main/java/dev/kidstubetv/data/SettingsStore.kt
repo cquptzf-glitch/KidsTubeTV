@@ -5,6 +5,7 @@ import android.util.Base64
 import java.io.File
 import java.security.MessageDigest
 import java.security.SecureRandom
+import org.json.JSONObject
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
@@ -86,6 +87,27 @@ class SettingsStore(context: Context) {
     val ready: Boolean get() = proxyReady && hasYouTubeAuth &&
         (allowedChannels.isNotEmpty() || approvedVideoIds.isNotEmpty())
     fun oauthAccessToken(): String = GoogleTvAuth(appContext).authorizedToken()
+
+    /** Persist user-selected Mihomo selector targets across app restarts. */
+    val selectedProxyNodes: Map<String, String>
+        get() = synchronized(PROFILE_LOCK) {
+            val raw = prefs.getString("proxy_selections", "{}") ?: "{}"
+            val data = runCatching { JSONObject(raw) }.getOrDefault(JSONObject())
+            val pairs = data.keys().asSequence().mapNotNull { key ->
+                data.optString(key).takeIf(String::isNotBlank)?.let { key to it }
+            }.toMap()
+            ProxySelectionPolicy.sanitize(pairs)
+        }
+
+    fun rememberProxySelection(group: String, node: String) = synchronized(PROFILE_LOCK) {
+        val updated = selectedProxyNodes.toMutableMap().apply { put(group, node) }
+        prefs.edit().putString("proxy_selections",
+            JSONObject(ProxySelectionPolicy.sanitize(updated)).toString()).apply()
+    }
+
+    fun clearProxySelections() = synchronized(PROFILE_LOCK) {
+        prefs.edit().remove("proxy_selections").apply()
+    }
 
     val hasPin: Boolean get() = prefs.contains("pin_hash") && prefs.contains("pin_salt")
     var pinLockedUntil: Long

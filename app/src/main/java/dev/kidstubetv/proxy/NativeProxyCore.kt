@@ -14,18 +14,18 @@ import org.json.JSONObject
  * Android 9 regression tests before any replacement.
  */
 internal interface NativeProxyCore {
-    fun setup(nativeLibraryDirectory: String, configDirectory: String, sdk: Int, done: (String?) -> Unit)
+    fun setup(nativeLibraryDirectory: String, configDirectory: String, sdk: Int, selected: Map<String, String>, done: (String?) -> Unit)
     fun startTun(fd: Int, callbacks: TunInterface)
     fun stopTun()
 }
 
 internal class CurrentMihomoAarCore : NativeProxyCore {
-    override fun setup(nativeLibraryDirectory: String, configDirectory: String, sdk: Int, done: (String?) -> Unit) {
+    override fun setup(nativeLibraryDirectory: String, configDirectory: String, sdk: Int, selected: Map<String, String>, done: (String?) -> Unit) {
         Clash.load(nativeLibraryDirectory)
         val init = JSONObject()
             .put("home-dir", configDirectory)
             .put("version", sdk).toString()
-        val options = JSONObject().put("selected-map", JSONObject()).toString()
+        val options = JSONObject().put("selected-map", JSONObject(selected)).toString()
         Clash.quickSetup(init, options, done)
     }
 

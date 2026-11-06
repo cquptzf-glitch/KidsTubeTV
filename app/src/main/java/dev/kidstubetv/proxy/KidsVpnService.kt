@@ -14,6 +14,7 @@ import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.ui.MainActivity
 import io.github.oviron.libmihomo.TunInterface
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Android user-consented VPN. Only this package is routed into TUN; the rest of the
@@ -30,6 +31,7 @@ class KidsVpnService : VpnService() {
     }
     private val core: NativeProxyCore = CurrentMihomoAarCore()
     private val active = AtomicBoolean(false)
+    private val sessionGeneration = AtomicInteger(0)
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
     private var failed = false
@@ -42,36 +44,44 @@ class KidsVpnService : VpnService() {
                 ProxyNetworkHealth.reset(this)
                 ensureForeground()
                 ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "Initializing Mihomo")
-                startCoreAsync()
+                startCoreAsync(sessionGeneration.incrementAndGet())
             }
         }
         return Service.START_NOT_STICKY
     }
 
-    private fun startCoreAsync() {
+    private fun startCoreAsync(sessionId: Int) {
         Thread({
             try {
-                val profile = SettingsStore(this).profileFile
+                val store = SettingsStore(applicationContext)
+                val profile = store.profileFile
                 require(profile.isFile) { "Missing Mihomo profile. Import in Parent Settings." }
+                // A stopped session may still finish its asynchronous SDK setup.
+                // Its callback must never establish a TUN for a later session.
+                if (!isCurrent(sessionId)) return@Thread
                 core.setup(applicationInfo.nativeLibraryDir,
-                    profile.parentFile!!.absolutePath, Build.VERSION.SDK_INT) { error ->
+                    profile.parentFile!!.absolutePath, Build.VERSION.SDK_INT,
+                    store.selectedProxyNodes) { error ->
                     main.post {
-                        if (!active.get()) return@post
+                        if (!isCurrent(sessionId)) return@post
                         if (!error.isNullOrEmpty()) {
-                            fail("Mihomo configuration: $error")
+                            fail("Mihomo configuration failed", sessionId)
                         } else {
-                            establishTun()
+                            establishTun(sessionId)
                         }
                     }
                 }
             } catch (error: Throwable) {
-                main.post { fail(error.message ?: error.javaClass.simpleName) }
+                main.post { fail(error.message ?: error.javaClass.simpleName, sessionId) }
             }
         }, "kidstubetv-mihomo-init").start()
     }
 
-    private fun establishTun() {
-        if (!active.get()) return
+    private fun isCurrent(sessionId: Int): Boolean =
+        active.get() && sessionGeneration.get() == sessionId
+
+    private fun establishTun(sessionId: Int) {
+        if (!isCurrent(sessionId)) return
         try {
             val builder = Builder()
                 .setSession("KidsTubeTV")
@@ -91,7 +101,7 @@ class KidsVpnService : VpnService() {
             // Update only after the app-only VPN exists. New YAML takes effect next start.
             SubscriptionUpdater.updateIfDue(applicationContext)
         } catch (error: Throwable) {
-            fail(error.message ?: "Unable to start TUN")
+            fail(error.message ?: "Unable to start TUN", sessionId)
         }
     }
 
@@ -111,14 +121,15 @@ class KidsVpnService : VpnService() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    private fun fail(message: String) {
-        if (!active.get()) return
+    private fun fail(message: String, sessionId: Int) {
+        if (!isCurrent(sessionId)) return
         failed = true
         ProxyStatus.update(this, ProxyStatus.Phase.ERROR, message)
         stopNow()
     }
 
     private fun stopNow() {
+        sessionGeneration.incrementAndGet()
         if (!active.getAndSet(false)) {
             stopSelf()
             return
