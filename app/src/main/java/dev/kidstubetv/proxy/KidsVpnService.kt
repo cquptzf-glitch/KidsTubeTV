@@ -7,6 +7,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.net.VpnService
+import android.net.ConnectivityManager
+import android.content.Context
+import android.os.Process
+import java.net.InetSocketAddress
+import java.net.URI
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -26,6 +31,28 @@ class KidsVpnService : VpnService() {
             return success
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
+
+        // FlClash uses /proc/net on Android 9 and the OS API on 10+.
+        override fun resolveUid(protocol: Int, source: String, target: String): Int {
+            if (Build.VERSION.SDK_INT < 29) return -1
+            return runCatching {
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                cm.getConnectionOwnerUid(
+                    protocol, socketAddress(source), socketAddress(target)
+                )
+            }.getOrDefault(-1)
+        }
+        override fun resolvePackage(uid: Int): String = if (uid == Process.myUid()) {
+            packageName
+        } else ""
+    }
+
+    private fun socketAddress(raw: String): InetSocketAddress {
+        val uri = URI("tcp://$raw")
+        require(uri.port in 0..65535 && !uri.host.isNullOrBlank()) {
+            "Invalid address passed by native VPN core"
+        }
+        return InetSocketAddress(uri.host, uri.port)
     }
     private val core: NativeProxyCore = NativeCoreFactory.create()
     private val main = Handler(Looper.getMainLooper())

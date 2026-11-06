@@ -21,7 +21,6 @@ internal class OfficialFlClashCore : NativeProxyCore {
         selected: Map<String, String>,
         done: (String?) -> Unit
     ) {
-        Mobile.touch() // triggers gomobile's libgojni.so initialization
         val init = JSONObject().put("home-dir", configDirectory).put("version", sdk).toString()
         val setup = JSONObject().put("selected-map", JSONObject(selected)).toString()
         Mobile.quickSetup(init, setup, ResultHandler { payload ->
