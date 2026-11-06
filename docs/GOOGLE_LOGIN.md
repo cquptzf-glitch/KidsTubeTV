@@ -2,7 +2,7 @@
 
 ## 与 API Key 的区别
 
-- **Google 账户就是 YouTube 账户。** KidsTubeTV 的“无需登录观看”使用 YouTube Data API v3 Key 访问公开元数据。
+- **Google 账户就是 YouTube 账户。** KidsTubeTV 可使用 YouTube Data API Key（无需登录），也可以在完成 Google OAuth 授权后直接使用只读 OAuth access token 请求公开元数据。
 - 可选 Google 登录用于读取 `subscriptions.list(mine=true)` 的“已订阅频道”，**不用于绕开频道白名单**。
 - 即使成功登录，儿童也只能观看家长主动勾选并通过 `madeForKids`/嵌入检查的视频。
 - 不同步官方 YouTube 观看历史、点赞、Kids 资料；KidsTubeTV 的收藏与历史保存在本机。

@@ -123,7 +123,7 @@ class MainActivity : Activity() {
         results.addView(TvUi.label(this, if (settings.ready) {
             "选择分类或「批准频道」开始观看。推荐先从已批准频道播放。"
         } else {
-            "请进入家长设置：配置 PIN、YouTube API 密钥、批准频道或视频、Clash/Mihomo YAML 或 HTTPS 订阅。"
+            "请进入家长设置：配置 PIN、Mihomo YAML/订阅、批准频道，并选择 YouTube API Key 或 Google OAuth 登录。"
         }, 19f))
         updateStatus()
     }

@@ -38,9 +38,9 @@ adb logcat -s AndroidRuntime chromium
 ## 配置代理和内容
 
 1. 从家长设置创建 4–12 位数字 PIN，重复失败有临时锁定。
-2. 在 Google Cloud 启用 YouTube Data API v3，生成 Key；输入至少一个 `UC...` 频道 ID 或视频 ID。
+2. 在 Google Cloud 启用 YouTube Data API v3；可生成 API Key，或选择通过 Google OAuth 认证。无论哪种方式都要输入至少一个 `UC...` 频道 ID 或视频 ID。
 3. 添加 HTTPS Clash/Mihomo YAML 订阅，点击“保存订阅地址并立即更新”；或从 U 盘导入 YAML。仅支持 YAML，暂不支持 Base64 的原始节点订阅；第一次在线下载依赖能到达订阅服务的现有网络连接。
-4. 返回首页，首次接受系统 VPN 授权，等待状态显示已连接。
+4. 返回首页，首次接受系统 VPN 授权，等待状态显示已连接。只要有 PIN 和 Mihomo 配置就能启动 VPN，但只有在 API Key 或 Google OAuth 令牌有效、且有白名单时才会展示视频。
 5. 用遥控器选择批准频道、分类、收藏或历史；家长可开启搜索并设置每日时长。
 6. 在“家长设置 → 节点选择”选择 Mihomo Selector 组，测速需要 VPN 已连接。
 7. 如需从已登录的 YouTube 账户导入订阅，使用 [Google TV OAuth](GOOGLE_LOGIN.md)（可选）。

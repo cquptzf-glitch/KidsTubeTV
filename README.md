@@ -23,14 +23,14 @@
 在 [Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml) 中打开最新成功的 `Android TV build`，下载 **KidsTubeTV-debug-apk** Artifact 并解压安装；或从代码本地构建。
 
 1. 在电视运行 KidsTubeTV，进入家长设置并设置 PIN。
-2. 添加 YouTube Data API Key 和精确批准的频道 ID（以 UC 开头，24 位），也可填写单视频 ID。
+2. 添加 YouTube Data API Key **或**后续使用 Google OAuth 授权，并填写精确批准的频道 ID（以 UC 开头，24 位），也可填写单视频 ID。
 3. 粘贴 **Clash/Mihomo YAML 订阅 URL** 并手动更新，或者使用 U 盘导入完整 `config.yaml`。
 4. 回到主界面，接受 Android VPN 授权，等待连接完成。
 5. 选择“批准频道”或分类，开始观看；只有通过儿童过滤的视频才进入播放器。
 
 **关于订阅：** 支持有效的 HTTPS YAML。**Base64 节点列表、vmess://、ss://、订阅转换服务响应并不自动转换为 Mihomo YAML**；这类地址请先通过可信工具转为合法的 Clash/Mihomo YAML。初次订阅下载本身需要可访问订阅服务器的网络，如现有 TV 网络不能访问，请先从 U 盘导入已下载的 YAML。
 
-**关于 Google：** 不登陆也能使用公共 API Key；如需导入自己 YouTube 账号订阅，可以使用家长设置里的可选 Google TV OAuth。需在 Google Cloud 创建 `TVs and Limited Input devices` 类型的 OAuth 客户端。此登录独立于电视系统 Google Account，不同步 YouTube 历史、点赞或官方 Kids 资料，详见 [Google 登录](docs/GOOGLE_LOGIN.md)。
+**关于 Google：** 可以选择公共 API Key（无需登录），或者使用 Google OAuth 令牌访问 YouTube Data API；如需导入自己 YouTube 账号订阅，可以使用家长设置里的可选 Google TV OAuth。需在 Google Cloud 创建 `TVs and Limited Input devices` 类型的 OAuth 客户端。此登录独立于电视系统 Google Account，不同步 YouTube 历史、点赞或官方 Kids 资料，详见 [Google 登录](docs/GOOGLE_LOGIN.md)。
 
 ## 技术栈
 
