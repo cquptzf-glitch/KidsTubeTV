@@ -18,6 +18,17 @@
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
 - **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时使用仓库 Secrets 构建签名 APK、生成 SHA256SUMS 并发布 GitHub Release
 
+## 最近完善（2026-11-06）
+
+- **首页多频道推荐：** 合并家长批准的最多 5 个频道及独立批准的视频，轮流混排，每条内容仍经过儿童标记、可嵌入与白名单验证。
+- **搜索配额优化：** 同一关键词的 YouTube 搜索 ID 最多缓存 10 分钟，最多保留 48 组结果；每次浏览仍重新查询和校验视频元数据，不缓存儿童审核结论。
+- **订阅更新安全：** 手动更新、后台自动更新和本地 YAML 导入互斥；新订阅地址仅在配置下载成功后保存，避免旧配置与新 URL 不一致；支持家长在高级设置恢复上一份 YAML。
+- **诊断：** 家长中心 → 网络代理 → 高级设置 → 设备与网络诊断，显示 Android API、CPU ABI、WebView 和 VPN 状态，可复制不含订阅令牌的报告。
+- **播放恢复：** 后台切换时中断的视频审核在返回后重新请求，防止黑屏；仍需真实 Android TV 端到端测试。
+- **CI：** 增加 Android Lint、单元测试、Debug APK 构建、原生 ABI 清单检查，并上传 HTML Lint 报告。
+
+详细排查方法见 [电视调试指南](docs/DEBUGGING_TV.md)。**此项目仍以 Android TV 侧载为目标，targetSdk=32 不符合 Google Play 发布要求**；不能将 CI 成功理解为平台合规或硬件验收。
+
 ## 新用户安装
 
 在 [Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml) 中打开最新成功的 `Android TV build`，下载 **KidsTubeTV-debug-apk** Artifact 并解压安装；或从代码本地构建。

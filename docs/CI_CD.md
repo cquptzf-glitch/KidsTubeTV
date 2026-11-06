@@ -7,8 +7,9 @@
 1. checkout
 2. JDK 17、Gradle 8.13、Android SDK 36
 3. 从固定版本 Release 下载 `libmihomo-android` AAR，核对 SHA-256
-4. 执行 `:app:testDebugUnitTest :app:assembleDebug`
-5. 上传 `KidsTubeTV-debug-apk` Artifact，用于开发阶段 APK 下载
+4. 执行 `:app:lintDebug :app:testDebugUnitTest :app:assembleDebug`（Lint、单元测试和 APK 构建均为阻断检查）
+5. 使用 Android SDK `aapt` 检查 APK minSDK/targetSDK，并列出 `lib/` 中的 32/64-bit ARM 原生库
+6. 上传 `KidsTubeTV-debug-apk` 与 `KidsTubeTV-lint-report` Artifact，用于开发阶段下载和审查
 
 **Debug APK 是调试签名，不应作为正式稳定版给其他用户长期分发。**
 
@@ -55,3 +56,10 @@ CD 将执行单元测试、`:app:assembleRelease`、签名打包和 SHA256 校�
 - 正式发布前建议增加 UI smoke、网络真实端到端测试、依赖扫描和 APK 签名验证
 
 CD 只负责构建和发布，不代表自动完成真实电视的全部功能验收。
+
+
+## Android 9 侧载策略
+
+目前 `minSdk=28`、`targetSdk=32`，侧载目标是旧款 Android TV，不是 Google Play 上架版。CI 仅对 `ExpiredTargetSdkVersion` 做有说明的 Lint 例外，**其他 Lint 错误仍会阻断构建**。未来上架前需要升级 targetSDK，并审查 Android 新版前台服务、通知、VPN 权限行为。
+
+每次 GitHub Actions 使用临时 runner 生成的 Debug keystore 可能不同；**不同 CI 构建的 Debug APK 不一定能直接覆盖安装**。需长期保留数据并做稳定升级时，使用同一份自有签名密钥打包。不要把测试 Debug APK 当作生产签名版本分发。
