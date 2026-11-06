@@ -1,11 +1,10 @@
-
-val kidsTubeOfficialCore = providers.gradleProperty("kidsTubeOfficialCore")
-    .map(String::toBoolean).getOrElse(false)
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val kidsTubeOfficialCore = providers.gradleProperty("kidsTubeOfficialCore")
+    .map(String::toBoolean).getOrElse(false)
 
 android {
     namespace = "dev.kidstubetv"
