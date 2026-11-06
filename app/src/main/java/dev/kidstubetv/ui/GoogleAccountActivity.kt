@@ -9,6 +9,12 @@ import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ImageView
+import android.graphics.Bitmap
+import android.graphics.Color
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
 import dev.kidstubetv.data.ApprovedPickerPolicy
 import dev.kidstubetv.data.GoogleTvAuth
 import dev.kidstubetv.data.ParentSession
@@ -148,9 +154,31 @@ class GoogleAccountActivity : Activity() {
             "请用手机或电脑打开以下网址：\n\n" +
             challenge.verificationUrl + "\n\n输入验证码（请区分大小写）：\n\n" +
             challenge.userCode + "\n\n同意只读访问 YouTube 订阅资料。", 21f)
+        val panel = TvUi.column(this)
+        panel.addView(description)
+        // QR contains only Google's verification URL, not OAuth tokens,
+        // the device code or the user's YouTube account identifiers.
+        runCatching {
+            val matrix = QRCodeWriter().encode(
+                challenge.verificationUrl, BarcodeFormat.QR_CODE, 360, 360,
+                mapOf(EncodeHintType.MARGIN to 2)
+            )
+            val pixels = IntArray(360 * 360) { index ->
+                if (matrix[index % 360, index / 360]) Color.BLACK else Color.WHITE
+            }
+            val bitmap = Bitmap.createBitmap(360, 360, Bitmap.Config.ARGB_8888)
+            bitmap.setPixels(pixels, 0, 360, 0, 0, 360, 360)
+            val qr = ImageView(this).apply {
+                setImageBitmap(bitmap)
+                contentDescription = "扫码打开 Google 官方设备授权页面"
+            }
+            panel.addView(qr, LinearLayout.LayoutParams(
+                TvUi.dp(this, 250), TvUi.dp(this, 250)
+            ))
+        }
         challengeDialog = AlertDialog.Builder(this)
-            .setTitle("Google TV 授权 · 请在手机操作")
-            .setView(description)
+            .setTitle("Google TV 授权 · 手机扫码")
+            .setView(panel)
             .setNegativeButton("取消登录") { _, _ -> cancelled.set(true) }
             .create().also { dialog ->
                 dialog.setOnDismissListener { cancelled.set(true) }
