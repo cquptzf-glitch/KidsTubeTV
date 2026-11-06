@@ -222,6 +222,9 @@ class SettingsActivity : Activity() {
         })
         networkAdvanced.addView(TvUi.button(this, "从 U 盘导入 Clash YAML") { importYaml() })
         networkAdvanced.addView(TvUi.button(this, "订阅自动更新周期") { chooseRefreshInterval() })
+        networkAdvanced.addView(TvUi.button(this, "设备与网络诊断") {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        })
         networkAdvanced.addView(TvUi.button(this, "关闭当前 VPN") {
             KidsVpnService.stop(this)
             networkState.text = "正在断开连接…"
