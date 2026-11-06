@@ -441,9 +441,16 @@ class MainActivity : Activity() {
             }.show()
     }
 
+    /** First-time setup opens the network tab directly, saving TV remote steps. */
+    private fun openParentSettings() {
+        startActivity(Intent(this, SettingsActivity::class.java).apply {
+            putExtra(SettingsActivity.EXTRA_SECTION, if (settings.hasProfile) 0 else 1)
+        })
+    }
+
     private fun parentGate() {
         if (!settings.hasPin) {
-            startActivity(Intent(this, SettingsActivity::class.java))
+            openParentSettings()
             return
         }
         val field = EditText(this).apply {
@@ -455,7 +462,7 @@ class MainActivity : Activity() {
             .setPositiveButton("确定") { _, _ ->
                 if (settings.verifyPin(field.text.toString())) {
                     ParentSession.unlock()
-                    startActivity(Intent(this, SettingsActivity::class.java))
+                    openParentSettings()
                 } else AlertDialog.Builder(this).setMessage("PIN 不正确或暂时锁定")
                     .setPositiveButton("确定", null).show()
             }.show()
