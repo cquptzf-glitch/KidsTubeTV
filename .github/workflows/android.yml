@@ -22,8 +22,9 @@ jobs:
           gradle-version: '8.13'
       - name: Install Android SDK platform
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+          SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDK_MANAGER" --licenses >/dev/null || true
+          "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
       - name: Download and verify pinned Mihomo AAR
         run: bash scripts/fetch-mihomo.sh
       - name: Test and compile
