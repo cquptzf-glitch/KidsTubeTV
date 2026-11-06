@@ -29,6 +29,20 @@ jobs:
         run: bash scripts/fetch-mihomo.sh
       - name: Lint, test and compile
         run: gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify APK minimum SDK and list native ABIs
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/aapt" dump badging "$APK" | grep -E "^(package:|sdkVersion:|targetSdkVersion:)"
+          echo "Bundled native libraries:"
+          unzip -Z -1 "$APK" | grep '^lib/' | sort | head -60 || true
+          for ABI in armeabi-v7a arm64-v8a; do
+            if unzip -Z -1 "$APK" | grep -q "^lib/$ABI/"; then
+              echo "Present: $ABI"
+            else
+              echo "::warning::No bundled native libraries for $ABI; verify target TV ABI before installing"
+            fi
+          done
       - name: Upload Android lint report
         if: always()
         uses: actions/upload-artifact@v4
