@@ -18,6 +18,27 @@ class ParentUnlockTicketTest {
         assertFalse(ticket.authorized())
     }
 
+    @Test fun pickerKeepsTicketOnlyUntilExpiryAndNeverUnlocksByItself() {
+        var clock = 100L
+        val ticket = ParentUnlockTicket({ clock }, idleTimeoutMs = 200L)
+        ticket.unlock()
+        ticket.allowExternalUi()
+        ticket.onBackground()
+        assertTrue(ticket.authorized())
+        clock = 301L
+        assertFalse(ticket.authorized())
+        ticket.endExternalUi()
+        ticket.onBackground()
+        assertFalse(ticket.authorized())
+    }
+
+    @Test fun normalBackgroundAlwaysLocks() {
+        val ticket = ParentUnlockTicket({ 50L })
+        ticket.unlock()
+        ticket.onBackground()
+        assertFalse(ticket.authorized())
+    }
+
     @Test fun backgroundLockInvalidatesEvenRecentlyUsedTicket() {
         val ticket = ParentUnlockTicket({ 50L })
         ticket.unlock()

@@ -27,7 +27,7 @@ class KidsApp : Application(), Application.ActivityLifecycleCallbacks {
     override fun onActivityStopped(activity: Activity) {
         activeScreens = (activeScreens - 1).coerceAtLeast(0)
         if (activeScreens == 0) {
-            ParentSession.lock()
+            ParentSession.onBackground()
             handler.postDelayed(disconnect, 6000)
         }
     }

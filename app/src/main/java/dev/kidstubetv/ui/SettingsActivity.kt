@@ -590,16 +590,27 @@ class SettingsActivity : Activity() {
     }
 
     private fun importYaml() {
-        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-        }, REQUEST_YAML)
+        // Android's document picker runs in another process. Preserve the
+        // parent's recent PIN permission only for this bounded transition.
+        ParentSession.allowExternalUi()
+        try {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }, REQUEST_YAML)
+        } catch (error: Exception) {
+            ParentSession.endExternalUi()
+            networkDetail.text = "无法打开系统文件选择器"
+        }
     }
 
     @Deprecated("Legacy storage document picker callback for Android TV 9")
     override fun onActivityResult(request: Int, code: Int, data: Intent?) {
         super.onActivityResult(request, code, data)
-        if (request != REQUEST_YAML || code != RESULT_OK) return
+        if (request != REQUEST_YAML) return
+        val permitted = ParentSession.authorized()
+        ParentSession.endExternalUi()
+        if (!permitted || code != RESULT_OK) return
         val uri = data?.data ?: return
         if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
             networkState.text = "已有订阅更新正在运行，请稍后导入"

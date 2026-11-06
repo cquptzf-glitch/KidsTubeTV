@@ -10,6 +10,7 @@ class ParentUnlockTicket(
 ) {
     init { require(idleTimeoutMs > 0) }
     private var expiresAt = 0L
+    private var externalUiUntil = 0L
 
     @Synchronized fun unlock() { expiresAt = nowMs() + idleTimeoutMs }
 
@@ -23,5 +24,24 @@ class ParentUnlockTicket(
         return true
     }
 
-    @Synchronized fun lock() { expiresAt = 0L }
+    /**
+     * Only a parent-initiated system document picker may temporarily background
+     * this Activity. The exception expires with the idle ticket itself.
+     */
+    @Synchronized fun allowExternalUi() {
+        if (authorized()) externalUiUntil = expiresAt
+    }
+
+    @Synchronized fun onBackground() {
+        if (externalUiUntil == 0L || nowMs() >= externalUiUntil) lock()
+    }
+
+    @Synchronized fun endExternalUi() {
+        externalUiUntil = 0L
+    }
+
+    @Synchronized fun lock() {
+        expiresAt = 0L
+        externalUiUntil = 0L
+    }
 }
