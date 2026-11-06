@@ -113,7 +113,7 @@ class SettingsStore(context: Context) {
         if (label.isBlank()) return
         synchronized(PROFILE_LOCK) {
             val entries = videoNames.toMutableMap().apply { put(id, label) }
-                .entries.takeLast(250)
+                .entries.toList().takeLast(250)
             prefs.edit().putString("video_names",
                 JSONObject(entries.associate { it.key to it.value }).toString()).apply()
         }
