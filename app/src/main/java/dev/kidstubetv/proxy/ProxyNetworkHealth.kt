@@ -22,6 +22,7 @@ object ProxyNetworkHealth {
     @Volatile var diagnostic: String = ""
         private set
     private val checking = AtomicBoolean(false)
+    private val generation = java.util.concurrent.atomic.AtomicInteger(0)
     private var failures = 0
 
     @Synchronized
@@ -34,6 +35,7 @@ object ProxyNetworkHealth {
     }
 
     fun reset(context: Context) {
+        generation.incrementAndGet()
         synchronized(this) { failures = 0 }
         update(context.applicationContext, State.UNKNOWN, "")
     }
@@ -41,6 +43,7 @@ object ProxyNetworkHealth {
     fun check(context: Context) {
         val app = context.applicationContext
         if (ProxyStatus.phase != ProxyStatus.Phase.READY || !checking.compareAndSet(false, true)) return
+        val sessionId = generation.get()
         Thread({
             var reachable = false
             try {
@@ -55,7 +58,8 @@ object ProxyNetworkHealth {
             } catch (_: Exception) {
                 reachable = false
             } finally {
-                if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+                if (generation.get() == sessionId &&
+                    ProxyStatus.phase == ProxyStatus.Phase.READY) {
                     if (reachable) {
                         synchronized(this) { failures = 0 }
                         update(app, State.ONLINE, "")

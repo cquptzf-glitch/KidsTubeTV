@@ -11,13 +11,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * New config is loaded on next VPN start; never hot-replace an active core.
  */
 object SubscriptionUpdater {
-    private val busy = AtomicBoolean(false)
+    // Shared with the manual TV settings updater.
+    private val busy = SubscriptionUpdateGate
 
     fun updateIfDue(context: Context) {
         val app = context.applicationContext
         val settings = SettingsStore(app)
         if (!settings.autoRefreshDue || ProxyStatus.phase != ProxyStatus.Phase.READY) return
-        if (!busy.compareAndSet(false, true)) return
+        if (!busy.tryAcquire()) return
 
         Thread({
             try {
@@ -31,7 +32,7 @@ object SubscriptionUpdater {
             } catch (_: Exception) {
                 // Keep previous good YAML; never expose URL/tokens in logs or TV UI.
             } finally {
-                busy.set(false)
+                busy.release()
             }
         }, "kids-subscription-auto-refresh").start()
     }

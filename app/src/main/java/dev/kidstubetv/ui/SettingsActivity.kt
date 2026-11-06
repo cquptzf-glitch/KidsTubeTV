@@ -278,30 +278,44 @@ class SettingsActivity : Activity() {
             hint = "https://example.com/subscription?token=...",
         ) { input ->
             val url = SubscriptionFormat.normalizeUrl(input)
-            store.subscriptionUrl = url
-            downloadSubscription(url)
+            // Commit URL only after new content is downloaded and persisted.
+            downloadSubscription(url, saveNewUrl = true)
         }
     }
 
-    private fun downloadSubscription(url: String) {
-        // Do not stop the current VPN *before* downloading. Some subscription
-        // hosts are accessible only while the existing VPN is active.
+    private fun downloadSubscription(url: String, saveNewUrl: Boolean = false) {
+        // Do not stop the active VPN: some providers can only be reached through it.
+        if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
+            networkState.text = "当前正在更新订阅"
+            networkDetail.text = "请稍后重试，避免同时写入代理文件"
+            return
+        }
         networkState.text = "◌ 正在更新订阅…"
         Thread({
             val result = runCatching {
                 val yaml = SubscriptionClient().fetch(url)
                 store.writeProfile(yaml)
+                if (saveNewUrl) {
+                    try {
+                        store.subscriptionUrl = url
+                    } catch (error: Exception) {
+                        store.restoreBackup()
+                        throw error
+                    }
+                }
                 store.subscriptionUpdatedAt = System.currentTimeMillis()
             }
+            dev.kidstubetv.proxy.SubscriptionUpdateGate.release()
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 refreshSummaries()
                 result.onSuccess {
                     networkState.text = "✓ 订阅已更新"
-                    networkDetail.text = "配置将在下次 VPN 连接时生效；当前播放不会中断。"
+                    networkDetail.text = "下次 VPN 连接时生效；当前播放不受影响"
                 }.onFailure {
                     networkState.text = "⚠ 订阅更新失败"
-                    networkDetail.text = "旧配置仍保留 · " + (it.message ?: "网络错误")
+                    // No provider URL or subscription token in on-screen errors.
+                    networkDetail.text = "旧配置保持不变，请检查订阅链接、网络及 YAML 格式"
                 }
             }
         }, "kids-subscription-manual").start()
