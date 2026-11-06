@@ -343,6 +343,15 @@ class PlayerActivity : Activity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val code = event.keyCode
+        // The warning is a non-modal banner; OK returns to the launcher even
+        // when transport controls previously held D-pad focus.
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
+            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
+                finish()
+                return true
+            }
+        }
         if (code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { togglePlayback(); return true }
         if (code == KeyEvent.KEYCODE_MEDIA_NEXT) { loadAt(position + 1); return true }
         if (code == KeyEvent.KEYCODE_MEDIA_PREVIOUS) { loadAt(position - 1); return true }
