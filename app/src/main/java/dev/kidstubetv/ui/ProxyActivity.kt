@@ -19,11 +19,22 @@ import dev.kidstubetv.proxy.ProxyStatus
  * not part of the child's everyday viewing navigation.
  */
 class ProxyActivity : Activity() {
+    /** Every remote action is gated by the recent parent PIN session. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (!ParentSession.onInteraction()) finish()
+    }
+
     private lateinit var content: LinearLayout
     private lateinit var state: TextView
     private lateinit var groups: LinearLayout
     private lateinit var advanced: LinearLayout
     private var knownGroups = emptyList<ProxyGroup>()
+
+    override fun onResume() {
+        super.onResume()
+        if (!ParentSession.authorized()) finish()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

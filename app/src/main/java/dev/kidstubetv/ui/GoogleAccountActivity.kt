@@ -23,6 +23,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Importing follows requires explicit parental selection, never blanket approval.
  */
 class GoogleAccountActivity : Activity() {
+    /** Every remote action is gated by the recent parent PIN session. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (!ParentSession.onInteraction()) finish()
+    }
+
     private val auth by lazy { GoogleTvAuth(this) }
     private val settings by lazy { SettingsStore(this) }
     private lateinit var clientId: EditText
@@ -30,6 +36,11 @@ class GoogleAccountActivity : Activity() {
     private lateinit var status: TextView
     private var cancel: AtomicBoolean? = null
     private var challengeDialog: AlertDialog? = null
+
+    override fun onResume() {
+        super.onResume()
+        if (!ParentSession.authorized()) finish()
+    }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)

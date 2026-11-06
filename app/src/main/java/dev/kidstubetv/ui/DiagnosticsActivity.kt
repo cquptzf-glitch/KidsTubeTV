@@ -24,12 +24,23 @@ import dev.kidstubetv.proxy.ProxyStatus
  * URLs, profile contents, access tokens or video history appear in the report.
  */
 class DiagnosticsActivity : Activity() {
+    /** Every remote action is gated by the recent parent PIN session. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (!ParentSession.onInteraction()) finish()
+    }
+
     private val store by lazy { SettingsStore(this) }
     private lateinit var report: TextView
     private lateinit var message: TextView
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) = refresh()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!ParentSession.authorized()) finish()
     }
 
     override fun onCreate(state: Bundle?) {

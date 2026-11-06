@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import dev.kidstubetv.proxy.KidsVpnService
+import dev.kidstubetv.data.ParentSession
 
 /** Stop the app-only VPN after all app activities have been backgrounded. */
 class KidsApp : Application(), Application.ActivityLifecycleCallbacks {
@@ -25,7 +26,10 @@ class KidsApp : Application(), Application.ActivityLifecycleCallbacks {
     }
     override fun onActivityStopped(activity: Activity) {
         activeScreens = (activeScreens - 1).coerceAtLeast(0)
-        if (activeScreens == 0) handler.postDelayed(disconnect, 6000)
+        if (activeScreens == 0) {
+            ParentSession.lock()
+            handler.postDelayed(disconnect, 6000)
+        }
     }
     override fun onActivityCreated(activity: Activity, state: Bundle?) {}
     override fun onActivityResumed(activity: Activity) {}

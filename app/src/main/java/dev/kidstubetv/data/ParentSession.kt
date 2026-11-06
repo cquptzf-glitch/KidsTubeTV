@@ -2,10 +2,11 @@ package dev.kidstubetv.data
 
 import android.os.SystemClock
 
-/** Process-local parental unlock ticket; never persisted across app restarts. */
+/** Process-local parental authorization; never persisted to disk. */
 object ParentSession {
-    @Volatile private var until = 0L
-    fun unlock() { until = SystemClock.elapsedRealtime() + 120_000L }
-    fun authorized(): Boolean = SystemClock.elapsedRealtime() < until
-    fun lock() { until = 0L }
+    private val ticket = ParentUnlockTicket(SystemClock::elapsedRealtime)
+    fun unlock() = ticket.unlock()
+    fun authorized(): Boolean = ticket.authorized()
+    fun onInteraction(): Boolean = ticket.onInteraction()
+    fun lock() = ticket.lock()
 }

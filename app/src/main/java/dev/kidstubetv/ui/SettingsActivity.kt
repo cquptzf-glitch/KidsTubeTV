@@ -44,6 +44,12 @@ import java.util.Date
  * subscription URLs are only shown while explicitly editing behind PIN.
  */
 class SettingsActivity : Activity() {
+    /** Every remote action is gated by the recent parent PIN session. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (!ParentSession.onInteraction()) finish()
+    }
+
     private val store by lazy { SettingsStore(this) }
     private lateinit var scroller: ScrollView
     private lateinit var content: LinearLayout
@@ -120,6 +126,10 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (!ParentSession.authorized()) {
+            finish()
+            return
+        }
         if (::summary.isInitialized) refreshSummaries()
     }
 
