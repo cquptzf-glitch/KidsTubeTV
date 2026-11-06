@@ -45,6 +45,7 @@ class PlayerActivity : Activity() {
     private var position = 0
     private var requestSerial = 0
     private var iframeReady = false
+    private var visibleToUser = false
     private var approvedVideoId: String? = null
     private var admissionPending = false
     private var player: YouTubePlayer? = null
@@ -152,15 +153,27 @@ class PlayerActivity : Activity() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
                 player = youTubePlayer
                 iframeReady = true
-                if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE)
-                    approvedVideoId?.let { youTubePlayer.loadVideo(it, history.resumePosition(it)) }
+                if (PlayerVisibilityPolicy.canPlay(
+                    visibleToUser,
+                    approvedVideoId != null,
+                    ProxyStatus.phase == ProxyStatus.Phase.READY,
+                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE
+                )) {
+                    approvedVideoId?.let {
+                        youTubePlayer.loadVideo(it, history.resumePosition(it))
+                    }
+                }
             }
 
             override fun onStateChange(
                 youTubePlayer: YouTubePlayer,
                 state: PlayerConstants.PlayerState
             ) {
+                if (!visibleToUser) {
+                    if (state == PlayerConstants.PlayerState.PLAYING) youTubePlayer.pause()
+                    playing = false
+                    return
+                }
                 playing = state == PlayerConstants.PlayerState.PLAYING
                 if (playing) {
                     val id = approvedVideoId
@@ -186,7 +199,8 @@ class PlayerActivity : Activity() {
             override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
                 positionSeconds = second
                 val currentId = approvedVideoId
-                if (playing && currentId != null && second - lastSavedSecond >= 12f) {
+                if (visibleToUser && playing && currentId != null &&
+                    second - lastSavedSecond >= 12f) {
                     history.savePosition(currentId, second)
                     lastSavedSecond = second
                 }
@@ -204,6 +218,7 @@ class PlayerActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        visibleToUser = true
         val filter = IntentFilter(ProxyStatus.ACTION_CHANGED).apply {
             addAction(ProxyNetworkHealth.ACTION_CHANGED)
         }
@@ -226,6 +241,7 @@ class PlayerActivity : Activity() {
     }
 
     override fun onStop() {
+        visibleToUser = false
         requestSerial++
         admissionPending = false // Stale async admission must not autoplay while backgrounded.
         handler.removeCallbacks(playbackTick)
@@ -279,7 +295,8 @@ class PlayerActivity : Activity() {
                 YouTubeRepository(settings).approveSingle(ids[newPosition])
             }
             runOnUiThread {
-                if (isFinishing || isDestroyed || request != requestSerial) return@runOnUiThread
+                if (isFinishing || isDestroyed || !visibleToUser ||
+                    request != requestSerial) return@runOnUiThread
                 admissionPending = false
                 if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
                     ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
@@ -316,7 +333,7 @@ class PlayerActivity : Activity() {
         videoTitle.text = "5 秒后播放下一集 · 按下一集可立即跳过"
         val callback = Runnable {
             autoNext = null
-            if (!isFinishing) loadAt(position + 1)
+            if (!isFinishing && visibleToUser) loadAt(position + 1)
         }
         autoNext = callback
         handler.postDelayed(callback, 5000)
