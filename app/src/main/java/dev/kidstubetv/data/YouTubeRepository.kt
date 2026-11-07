@@ -103,7 +103,7 @@ class YouTubeRepository(private val settings: SettingsStore) {
         ApprovedHomeFeedService(
             YouTubeCatalogSource { endpoint, params -> get(endpoint, params) },
             ::lookup
-        ).load(settings.approvedVideoIds.toList(), settings.allowedChannels.toList())
+        ).load(settings.approvedVideoIds.toList(), settings.nextHomeChannelWindow())
 
     /**
      * Parent-only authenticated API probe (costs a videos.list quota unit).

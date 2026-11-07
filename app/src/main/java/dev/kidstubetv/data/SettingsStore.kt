@@ -136,6 +136,17 @@ class SettingsStore(context: Context) {
     val approvedChannels: Set<String> get() = tokenize(channelsText)
         .filter { it.matches(Regex("UC[A-Za-z0-9_-]{22}")) }.toSet()
     val allowedChannels: Set<String> get() = approvedChannels
+
+    /** Advance the small home window so importing many channels stays useful. */
+    fun nextHomeChannelWindow(limit: Int = 5): List<String> = synchronized(PROFILE_LOCK) {
+        val channels = allowedChannels.toList()
+        if (channels.isEmpty()) return@synchronized emptyList()
+        val cursor = prefs.getInt("home_channel_cursor", 0)
+        val selected = ApprovedChannelRotation.select(channels, cursor, limit)
+        val next = ApprovedChannelRotation.nextCursor(channels.size, cursor, limit)
+        prefs.edit().putInt("home_channel_cursor", next).apply()
+        selected
+    }
     val approvedVideoIds: Set<String> get() = tokenize(allowedVideosText)
         .filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }.toSet()
     val blockedVideoIds: Set<String> get() = tokenize(blockedVideosText)
