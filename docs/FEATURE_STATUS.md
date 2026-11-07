@@ -118,3 +118,13 @@
 - Google TV OAuth 页面将扫码与订阅导入前置、客户端配置按需展开，不在电视输入框重显旧 Secret；新增安全的 OAuth 失败类别和 YouTube API 错误翻译。
 - 直接显示脱敏 VPN 初始化阶段原因；新增无凭据 Google OAuth/YouTube HTTPS 两站点探测；首页显示缺少的代理、Google API 或白名单步骤。
 - 静态验证与 Release 仅表示可编译和纯逻辑测试通过，**不宣称**电视上的 VPN、Google 授权或 YouTube IFrame 已正常工作。需要进一步收集真机脱敏诊断。
+
+## 2026-11-07 SmartTube 参考与 beta.4
+
+参考 SmartTube MIT 仓库和 MediaServiceCore（亦为 MIT）的独立登录、浏览、图片与播放模块。当前只迁移了**机制/设计**，而非复制它的 Google/YouTube 私有凭据、解析服务或 ExoPlayer。详情见 `docs/SMARTTUBE_PORTING_REVIEW.md`。
+
+- 新增 `CatalogRefreshPolicy`：30 分钟推荐刷新、失败 5 分钟退避、配置变更失效，并配有 JVM 单测。
+- 首页增加手动刷新入口；刷新时保持原视图、保留焦点/滚动位置，内容未变则不重建；异步请求可取消。
+- Glide 图片按实际卡片目标尺寸解码，遇到无效封面可使用备用视频封面；自定义 Hero/Grid 焦点标识分别保存。
+- 播放出错后提供家长安全的手动重试，重新执行儿童视频准入，不直接采用 SmartTube 的非官方流媒体解析服务。
+- beta.4 修正请求完成时 VPN 恰好断开的场景，避免首页加载状态永远卡住。

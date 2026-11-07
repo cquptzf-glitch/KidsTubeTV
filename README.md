@@ -101,3 +101,7 @@
 参考 [SmartTube](https://github.com/yuliskov/SmartTube) 与 [MediaServiceCore](https://github.com/yuliskov/MediaServiceCore) 的电视登录、刷新、焦点与播放架构。本轮已自行实现带过期/失败退避的首页刷新、保留旧内容及遥控器焦点、封面尺寸缓存与失败回退，以及经过二次儿童内容审核的播放器手动重试。
 
 **没有直接移植 SmartTube 的 YouTube 私有接口、账号凭据、完整 ExoPlayer 或第三方媒体解析器。** 项目仍使用自己的 Google Cloud TV OAuth、官方 YouTube Data API 子集和 IFrame。实现与风险详见 [SmartTube 移植评估](docs/SMARTTUBE_PORTING_REVIEW.md)。
+
+### v0.3.0-beta.4 预览版修订
+
+修复首页异步请求期间 VPN 突然断开后 `catalogLoading` 状态可能无法复位，导致随后 VPN 已连接也不加载视频。延续 beta.3 的 SmartTube 风格按需刷新、保留位置、播放器手动重审及 Google/VPN 故障诊断。此版本仍需要 Android TV 真机验收，使用临时 Debug 签名。

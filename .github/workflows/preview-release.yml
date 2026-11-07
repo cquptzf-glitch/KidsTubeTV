@@ -2,7 +2,7 @@ name: KidsTubeTV preview release (official FlClash core)
 on:
   push:
     branches:
-      - "publish-preview/v0.3.0-beta.3"
+      - "publish-preview/v0.3.0-beta.4"
 permissions:
   contents: write
 jobs:
@@ -35,22 +35,22 @@ jobs:
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
       - name: Lint, unit tests and compile preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.3
-          KIDSTUBE_VERSION_CODE: 5
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.4
+          KIDSTUBE_VERSION_CODE: 6
         run: |
           gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
           mkdir -p dist/release
-          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.3-FlClash-PREVIEW.apk
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.4-FlClash-PREVIEW.apk
           cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
           cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
           ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
       - name: Prepare preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## KidsTubeTV v0.3.0-beta.3 (developer preview)
+          ## KidsTubeTV v0.3.0-beta.4 (developer preview)
 
           - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
           - Embedded official FlClash v0.9.3 core built from pinned upstream source.
@@ -65,6 +65,7 @@ jobs:
           - Parent homepage now lists missing setup steps instead of a generic empty screen.
           - SmartTube-inspired in-place home refresh with focus retention, 30-minute TTL,
             5-minute failure cooldown, image fallback, and manual approved-video retry.
+          - Fix an async catalog loading latch that could remain stuck after VPN disruption.
           - Native VPN functionality remains unverified on a physical TV.
 
           **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.
@@ -77,9 +78,9 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.3
+          tag_name: v0.3.0-beta.4
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.3 — Android TV preview
+          name: KidsTubeTV v0.3.0-beta.4 — Android TV preview
           prerelease: true
           draft: false
           generate_release_notes: false
