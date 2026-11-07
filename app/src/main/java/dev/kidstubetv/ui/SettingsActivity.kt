@@ -807,7 +807,6 @@ class SettingsActivity : Activity() {
                         // The timestamp belongs to the old URL. A newly saved
                         // provider must be eligible for the next auto refresh.
                         store.subscriptionUpdatedAt = 0L
-                        store.clearProxySelections()
                     }
                     dialog.dismiss()
                     refreshSummaries()
@@ -846,13 +845,17 @@ class SettingsActivity : Activity() {
                     if (providerChanged) store.clearProxySelections()
                     store.subscriptionUpdatedAt = System.currentTimeMillis()
                 }.onFailure { failure ->
-                    store.recordSubscriptionFailure(failure, vpnReadyAtStart)
+                    // Do not stamp an old request's error over a newer URL.
+                    if (store.subscriptionUrl == url) {
+                        store.recordSubscriptionFailure(failure, vpnReadyAtStart)
+                    }
                 }
             } finally {
                 dev.kidstubetv.proxy.SubscriptionUpdateGate.release()
             }
             runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed ||
+                    store.subscriptionUrl != url) return@runOnUiThread
                 refreshSummaries()
                 result.onSuccess {
                     networkState.text = "✓ 订阅下载并校验成功"
