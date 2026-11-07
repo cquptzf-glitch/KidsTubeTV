@@ -1,10 +1,7 @@
 package dev.kidstubetv.data
 
-import android.net.Uri
 import org.json.JSONObject
 import dev.kidstubetv.proxy.ProxyStatus
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** YouTube Data API v3, never retrieves video from undocumented endpoints. */
 class YouTubeRepository(private val settings: SettingsStore) {
@@ -138,30 +135,17 @@ class YouTubeRepository(private val settings: SettingsStore) {
     /** Recheck at every play/next, independent of the navigation queue. */
     fun approveSingle(id: String): KidVideo? = lookup(listOf(id)).firstOrNull()
 
-    private fun get(endpoint: String, params: Map<String, String>): JSONObject {
-        GoogleRequestPolicy.requireAvailable(ProxyStatus.phase == ProxyStatus.Phase.READY)
-        val key = settings.apiKey
-        val token = if (key.isBlank()) settings.oauthAccessToken() else ""
-        require(key.isNotBlank() || token.isNotBlank()) {
-            "请配置 YouTube Data API Key 或完成 Google 电视账号授权"
-        }
-        val uri = Uri.parse("https://www.googleapis.com/youtube/v3/$endpoint").buildUpon()
-            .apply { params.forEach { (k, v) -> appendQueryParameter(k, v) } }.build()
-        val conn = URL(uri.toString()).openConnection() as HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 15_000
-        if (key.isNotBlank()) conn.setRequestProperty("X-Goog-Api-Key", key)
-        else conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.setRequestProperty("Accept", "application/json")
-        try {
-            val code = conn.responseCode
-            if (code !in 200..299) {
-                val body = conn.errorStream?.bufferedReader()
-                    ?.use { it.readText().take(16_384) }.orEmpty()
-                val detail = runCatching { JSONObject(body).optJSONObject("error") }.getOrNull()
-                error(YouTubeApiErrorPolicy.explain(code, detail))
-            }
-            return JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-        } finally { conn.disconnect() }
+    private val apiClient by lazy {
+        YouTubeDataApiClient(
+            credential = {
+                val key = settings.apiKey
+                if (key.isNotBlank()) YouTubeCredential.ApiKey(key)
+                else YouTubeCredential.OAuthToken(settings.oauthAccessToken())
+            },
+            vpnReady = { ProxyStatus.phase == ProxyStatus.Phase.READY }
+        )
     }
+
+    private fun get(endpoint: String, params: Map<String, String>): JSONObject =
+        apiClient.get(endpoint, params)
 }
