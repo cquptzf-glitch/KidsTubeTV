@@ -16,6 +16,7 @@ data class TvDeviceCode(
     val expiresAt: Long,
     val intervalSeconds: Int,
     val issuedClientId: String,
+    val issuedSession: Long,
 )
 data class YoutubeSubscription(val channelId: String, val title: String)
 
@@ -28,6 +29,7 @@ class GoogleTvAuth(context: Context) {
     private companion object {
         // Multiple SettingsStore/GoogleTvAuth instances share one credentials set.
         val CREDENTIAL_LOCK = Any()
+        private val SESSION = GoogleAuthSessionEpoch()
     }
 
     private val secret = SecurePrefs(context.applicationContext)
@@ -63,14 +65,19 @@ class GoogleTvAuth(context: Context) {
             update.changed
         }
 
+    /** In-memory generation, never a token, for invalidating stale TV views. */
+    val authRevision: Long get() = SESSION.snapshot()
+
     val isLinked: Boolean get() = secret.get("oauth_refresh_token").isNotBlank()
     /** Get an OAuth bearer for public YouTube API calls when no API key was configured. */
     fun authorizedToken(): String = accessToken()
     val isConfigured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank()
 
     fun begin(): TvDeviceCode {
-        require(isConfigured) { "请先设置 Google TV OAuth Client ID 和 Client Secret" }
-        val idAtIssue = clientId
+        val (idAtIssue, sessionAtIssue) = synchronized(CREDENTIAL_LOCK) {
+            require(isConfigured) { "请先设置 Google TV OAuth Client ID 和 Client Secret" }
+            clientId to SESSION.snapshot()
+        }
         val (status, json) = post("https://oauth2.googleapis.com/device/code", mapOf(
             "client_id" to idAtIssue,
             "scope" to "https://www.googleapis.com/auth/youtube.readonly",
@@ -78,6 +85,9 @@ class GoogleTvAuth(context: Context) {
         check(status in 200..299) {
             GoogleOauthErrorPolicy.explain(status, json.optString("error", json.optString("error_code")))
         }
+        check(synchronized(CREDENTIAL_LOCK) {
+            SESSION.isCurrent(sessionAtIssue) && idAtIssue == clientId
+        }) { "Google 授权设置已改变，请重新发起扫码" }
         val expires = json.getLong("expires_in").coerceIn(1, 3600)
         return TvDeviceCode(
             code = json.getString("device_code"),
@@ -86,6 +96,7 @@ class GoogleTvAuth(context: Context) {
             expiresAt = System.currentTimeMillis() + expires * 1000L,
             intervalSeconds = json.optInt("interval", 5).coerceIn(5, 60),
             issuedClientId = idAtIssue,
+            issuedSession = sessionAtIssue,
         )
     }
 
@@ -97,7 +108,8 @@ class GoogleTvAuth(context: Context) {
         var delaySec = challenge.intervalSeconds
         while (!cancelled.get() && System.currentTimeMillis() < challenge.expiresAt) {
             Thread.sleep(delaySec * 1000L)
-            if (cancelled.get() || clientId != challenge.issuedClientId) return
+            if (cancelled.get() || clientId != challenge.issuedClientId ||
+                !SESSION.isCurrent(challenge.issuedSession)) return
             val secretAtRequest = clientSecret
             val (status, response) = post("https://oauth2.googleapis.com/token", mapOf(
                 "client_id" to challenge.issuedClientId,
@@ -111,11 +123,14 @@ class GoogleTvAuth(context: Context) {
             if (status in 200..299 && response.has("access_token")) {
                 synchronized(CREDENTIAL_LOCK) {
                     if (cancelled.get() || challenge.issuedClientId != clientId ||
-                        secretAtRequest != clientSecret) return
+                        secretAtRequest != clientSecret ||
+                        !SESSION.isCurrent(challenge.issuedSession)) return
                     val refresh = response.optString("refresh_token")
                     check(refresh.isNotBlank()) { "Google 未返回 refresh token，请重新授权" }
                     secret.put("oauth_refresh_token", refresh)
                     saveAccessToken(response)
+                    // This successful sign-in replaces any other pending device code.
+                    SESSION.invalidate()
                 }
                 onProgress("Google 授权成功，可以读取订阅频道")
                 return
@@ -157,7 +172,10 @@ class GoogleTvAuth(context: Context) {
         return result.values.toList()
     }
 
-    fun logoutLocal() {
+    fun logoutLocal() = synchronized(CREDENTIAL_LOCK) {
+        // Invalidate BEFORE clearing tokens: even an in-flight HTTP response
+        // cannot restore credentials after the parent explicitly signed out.
+        SESSION.invalidate()
         secret.put("oauth_refresh_token", "")
         secret.put("oauth_access_token", "")
         prefs.edit().remove("expires_at").apply()
@@ -170,8 +188,10 @@ class GoogleTvAuth(context: Context) {
         }
         val refresh = secret.get("oauth_refresh_token")
         check(refresh.isNotBlank()) { "Google 登录已失效，请重新授权" }
-        val idForRefresh = clientId
-        val secretForRefresh = clientSecret
+        val (idForRefresh, secretForRefresh, sessionAtRefresh) =
+            synchronized(CREDENTIAL_LOCK) {
+                Triple(clientId, clientSecret, SESSION.snapshot())
+            }
         val (code, response) = post("https://oauth2.googleapis.com/token", mapOf(
             "client_id" to idForRefresh,
             "client_secret" to secretForRefresh,
@@ -182,6 +202,7 @@ class GoogleTvAuth(context: Context) {
             val oauthError = response.optString("error")
             if (oauthError == "invalid_grant") synchronized(CREDENTIAL_LOCK) {
                 if (clientId == idForRefresh &&
+                    SESSION.isCurrent(sessionAtRefresh) &&
                     secret.get("oauth_refresh_token") == refresh) logoutLocal()
             }
             error(GoogleOauthErrorPolicy.explain(code, oauthError))
@@ -189,6 +210,7 @@ class GoogleTvAuth(context: Context) {
         return synchronized(CREDENTIAL_LOCK) {
             check(clientId == idForRefresh &&
                 clientSecret == secretForRefresh &&
+                SESSION.isCurrent(sessionAtRefresh) &&
                 secret.get("oauth_refresh_token") == refresh) {
                 "Google 客户端在刷新期间发生变化，请重新授权"
             }

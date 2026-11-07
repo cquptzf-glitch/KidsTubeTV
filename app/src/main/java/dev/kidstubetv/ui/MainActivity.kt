@@ -121,6 +121,7 @@ class MainActivity : Activity() {
         settings.allowedVideosText,
         settings.blockedVideosText,
         settings.hasYouTubeAuth.toString(),
+        settings.credentialRevision,
         settings.searchAllowed.toString(),
         settings.dailyLimitMinutes.toString()
     ).joinToString("|")

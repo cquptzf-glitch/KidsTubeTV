@@ -30,7 +30,14 @@ class SettingsStore(context: Context) {
                 }
             }
         }
-        set(v) { secrets.put("youtube_api_key", v.trim()) }
+        set(v) = synchronized(PROFILE_LOCK) {
+            val incoming = v.trim()
+            if (apiKey != incoming) {
+                secrets.put("youtube_api_key", incoming)
+                prefs.edit().putLong("youtube_api_revision",
+                    prefs.getLong("youtube_api_revision", 0L) + 1L).apply()
+            }
+        }
 
     var subscriptionUrl: String
         get() = secrets.get("clash_subscription")
@@ -142,6 +149,9 @@ class SettingsStore(context: Context) {
     /** VPN can start before YouTube OAuth is linked; content still stays locked. */
     val proxyReady: Boolean get() = hasProfile && hasPin
     val hasYouTubeAuth: Boolean get() = apiKey.isNotBlank() || GoogleTvAuth(appContext).isLinked
+    /** Non-secret epochs ensure returning from settings refreshes the current catalog. */
+    val credentialRevision: String get() =
+        "${prefs.getLong("youtube_api_revision", 0L)}:${GoogleTvAuth(appContext).authRevision}"
     val ready: Boolean get() = proxyReady && hasYouTubeAuth &&
         (allowedChannels.isNotEmpty() || approvedVideoIds.isNotEmpty())
     fun oauthAccessToken(): String = GoogleTvAuth(appContext).authorizedToken()
