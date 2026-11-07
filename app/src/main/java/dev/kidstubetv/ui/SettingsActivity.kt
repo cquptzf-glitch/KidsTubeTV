@@ -9,6 +9,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.net.VpnService
+import android.graphics.drawable.GradientDrawable
 import android.view.KeyEvent
 import android.text.InputType
 import android.view.Gravity
@@ -75,6 +79,14 @@ class SettingsActivity : Activity() {
     private val sections = mutableListOf<LinearLayout>()
     private val tabs = mutableListOf<Button>()
     private var selectedSection = 0
+    private lateinit var pageTitle: TextView
+    private lateinit var searchTile: SettingsActionTile
+    private lateinit var autoplayTile: SettingsActionTile
+    private lateinit var vpnTile: SettingsActionTile
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val startVpnAfterStop = Runnable {
+        if (!isFinishing && !isDestroyed && ParentSession.authorized()) requestVpnFromParent()
+    }
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -85,27 +97,75 @@ class SettingsActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         if (store.hasPin && !ParentSession.authorized()) { finish(); return }
-        scroller = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
-        content = TvUi.column(this)
-        scroller.addView(content)
-        setContentView(scroller)
-        content.addView(TvUi.label(this, "家长中心", 30f, true))
-        content.addView(TvUi.label(this, "孩子只需选视频，所有复杂设置都留在这里。", 16f))
-        TvUi.space(content, this, 14)
 
-        val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("✦ 儿童内容", "◈ 网络代理", "◉ YouTube 账号").forEachIndexed { index, label ->
-            val button = TvUi.button(this, label) { showSection(index) }
+        // Fixed rail + independent content scroller: navigation never disappears
+        // when a long configuration section is scrolled with a TV remote.
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(TvUi.bg)
+        }
+        setContentView(root)
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(TvUi.dp(this@SettingsActivity, 20), TvUi.dp(this@SettingsActivity, 28),
+                TvUi.dp(this@SettingsActivity, 18), TvUi.dp(this@SettingsActivity, 20))
+            setBackgroundColor(0xFF142A35.toInt())
+        }
+        root.addView(rail, LinearLayout.LayoutParams(TvUi.dp(this, 232), -1))
+
+        rail.addView(TvUi.label(this, "✦ KidsTubeTV", 24f, true))
+        rail.addView(TvUi.label(this, "家长中心", 16f).apply { setTextColor(TvUi.muted) })
+        TvUi.space(rail, this, 34)
+
+        listOf("01  儿童内容", "02  网络与 VPN", "03  YouTube 账号").forEachIndexed { index, title ->
+            val button = Button(this).apply {
+                id = View.generateViewId()
+                text = title
+                isAllCaps = false
+                textSize = 18f
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(TvUi.dp(this@SettingsActivity, 18), 0,
+                    TvUi.dp(this@SettingsActivity, 12), 0)
+                setTextColor(TvUi.text)
+                background = SettingsDecor.navShape(this@SettingsActivity, index == 0, false)
+                setOnClickListener { showSection(index, moveFocus = true) }
+                setOnFocusChangeListener { _, hasFocus ->
+                    background = SettingsDecor.navShape(this@SettingsActivity,
+                        selectedSection == index, hasFocus)
+                }
+            }
             tabs.add(button)
-            nav.addView(button, LinearLayout.LayoutParams(0, TvUi.dp(this, 64), 1f).apply {
-                rightMargin = TvUi.dp(this@SettingsActivity, 12)
+            rail.addView(button, LinearLayout.LayoutParams(-1, TvUi.dp(this, 72)).apply {
+                bottomMargin = TvUi.dp(this@SettingsActivity, 11)
             })
         }
-        content.addView(nav)
-        TvUi.space(content, this, 9)
+        rail.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        rail.addView(SettingsDecor.action(this, "← 返回儿童首页", "关闭家长设置") { finish() },
+            LinearLayout.LayoutParams(-1, TvUi.dp(this, 78)))
+
+        val right = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(TvUi.dp(this@SettingsActivity, 28), TvUi.dp(this@SettingsActivity, 17),
+                TvUi.dp(this@SettingsActivity, 32), 0)
+        }
+        root.addView(right, LinearLayout.LayoutParams(0, -1, 1f))
+        pageTitle = TvUi.label(this, "网络与 VPN", 28f, true)
+        right.addView(pageTitle)
         summary = TvUi.label(this, "", 15f).apply { setTextColor(TvUi.muted) }
-        content.addView(summary)
-        TvUi.space(content, this, 11)
+        right.addView(summary)
+        TvUi.space(right, this, 8)
+        scroller = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            isFillViewport = true
+            clipToPadding = false
+        }
+        right.addView(scroller, LinearLayout.LayoutParams(-1, 0, 1f))
+        content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, TvUi.dp(this@SettingsActivity, 4),
+                0, TvUi.dp(this@SettingsActivity, 32))
+        }
+        scroller.addView(content)
 
         repeat(3) {
             val panel = LinearLayout(this).apply {
@@ -118,8 +178,7 @@ class SettingsActivity : Activity() {
         buildChildSection(sections[0])
         buildNetworkSection(sections[1])
         buildAccountSection(sections[2])
-        content.addView(TvUi.button(this, "返回儿童首页") { finish() })
-        showSection(intent.getIntExtra(EXTRA_SECTION, 0).coerceIn(0, 2))
+        showSection(intent.getIntExtra(EXTRA_SECTION, 1).coerceIn(0, 2), moveFocus = false)
         refreshSummaries()
         if (!store.hasPin) setPinDialog(initial = true)
     }
@@ -148,79 +207,105 @@ class SettingsActivity : Activity() {
 
     override fun onStop() {
         unregisterReceiver(statusReceiver)
+        uiHandler.removeCallbacks(startVpnAfterStop)
         super.onStop()
     }
 
-    private fun showSection(index: Int) {
+    private fun showSection(index: Int, moveFocus: Boolean = false) {
         selectedSection = index
-        sections.forEachIndexed { i, panel -> panel.visibility = if (i == index) View.VISIBLE else View.GONE }
-        tabs.forEachIndexed { i, button -> button.alpha = if (i == index) 1f else 0.67f }
-        scroller.post { scroller.smoothScrollTo(0, 0) }
+        pageTitle.text = listOf("儿童内容", "网络与 VPN", "YouTube 账号")[index]
+        sections.forEachIndexed { i, panel ->
+            panel.visibility = if (i == index) View.VISIBLE else View.GONE
+        }
+        tabs.forEachIndexed { i, button ->
+            button.background = SettingsDecor.navShape(this, i == index, button.hasFocus())
+        }
+        scroller.scrollTo(0, 0)
+        if (moveFocus) {
+            val targets = mutableListOf<View>()
+            sections[index].addFocusables(targets, View.FOCUS_DOWN)
+            targets.firstOrNull()?.let { target ->
+                target.nextFocusLeftId = tabs[index].id
+                target.requestFocus()
+            }
+        }
     }
 
     private fun heading(panel: LinearLayout, title: String, hint: String) {
-        panel.addView(TvUi.label(this, title, 24f, true))
-        panel.addView(TvUi.label(this, hint, 16f).apply { setTextColor(TvUi.muted) })
-        TvUi.space(panel, this, 15)
+        panel.addView(TvUi.label(this, title, 21f, true))
+        panel.addView(TvUi.label(this, hint, 15f).apply { setTextColor(TvUi.muted) })
+        TvUi.space(panel, this, 12)
+    }
+
+    private fun action(
+        panel: LinearLayout,
+        title: String,
+        hint: String,
+        primary: Boolean = false,
+        callback: () -> Unit
+    ): SettingsActionTile {
+        val tile = SettingsDecor.action(this, title, hint, primary, callback)
+        panel.addView(tile, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = TvUi.dp(this@SettingsActivity, 10)
+        })
+        return tile
+    }
+
+    private fun expandButton(panel: LinearLayout, title: String, advanced: LinearLayout) {
+        val button = action(panel, title + "  ▾", "低频功能，需要时再展开") {
+            advanced.visibility = if (advanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+        button.setOnClickListener {
+            val open = advanced.visibility != View.VISIBLE
+            advanced.visibility = if (open) View.VISIBLE else View.GONE
+            button.setTitle(title + if (open) "  ▴" else "  ▾")
+        }
     }
 
     private fun buildChildSection(panel: LinearLayout) {
-        heading(panel, "儿童内容", "大封面浏览，只显示家长批准且经过儿童标记检查的视频。")
+        heading(panel, "内容白名单", "默认只看家长批准的频道；分类与搜索仍经过儿童内容审核。")
         childSummary = TvUi.label(this, "", 18f)
         panel.addView(childSummary)
-        TvUi.space(panel, this, 10)
-        panel.addView(TvUi.primaryButton(this, "＋ 通过频道链接添加") {
+        TvUi.space(panel, this, 12)
+        action(panel, "＋ 添加 YouTube 频道", "粘贴分享链接或 @handle，确认后加入白名单", true) {
             addChannelFromLink()
-        })
-        panel.addView(TvUi.button(this, "查看 / 删除已批准频道") {
-            manageApprovedChannels()
-        })
-        panel.addView(TvUi.button(this, "设置每日观看时长") { pickDailyLimit() })
-        val searchControl = Switch(this).apply {
-            text = "允许搜索（结果仍受白名单限制）"
-            textSize = 18f
-            setTextColor(TvUi.text)
-            isChecked = store.searchAllowed
-            setOnCheckedChangeListener { _, enabled ->
-                store.searchAllowed = enabled
-                refreshSummaries()
-            }
         }
-        panel.addView(searchControl)
-        panel.addView(Switch(this).apply {
-            text = "允许自动播放下一集"
-            textSize = 18f
-            setTextColor(TvUi.text)
-            isChecked = store.autoplayNext
-            setOnCheckedChangeListener { _, enabled ->
-                store.autoplayNext = enabled
-                refreshSummaries()
-            }
-        })
-        TvUi.space(panel, this, 10)
-        panel.addView(TvUi.button(this, "设置 YouTube API Key（可选）") {
-            editValue("YouTube Data API v3 Key", store.apiKey, secret = true) {
-                store.apiKey = it.trim()
-            }
-        })
-        panel.addView(TvUi.button(this, "＋ 通过视频链接添加") {
-            addVideoFromLink()
-        })
-        panel.addView(TvUi.button(this, "查看 / 删除已批准视频") {
-            manageApprovedVideos()
-        })
-        panel.addView(TvUi.button(this, "精确允许的视频 ID") {
+        action(panel, "管理已批准频道", "查看频道名称，移除不想继续推荐的频道") {
+            manageApprovedChannels()
+        }
+        action(panel, "每日观看时长", "15–120 分钟，达到上限后停止播放") { pickDailyLimit() }
+        searchTile = action(panel, "允许搜索", "仅显示白名单与儿童审核通过的内容") {
+            store.searchAllowed = !store.searchAllowed
+            refreshSummaries()
+        }
+        autoplayTile = action(panel, "自动播放下一集", "播放结束后可自动切换到下一条已批准视频") {
+            store.autoplayNext = !store.autoplayNext
+            refreshSummaries()
+        }
+        TvUi.space(panel, this, 9)
+        val advanced = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        expandButton(panel, "更多儿童管理", advanced)
+        panel.addView(advanced)
+        action(advanced, "YouTube Data API Key", "没有 Google 授权时可使用 API Key") {
+            editValue("YouTube Data API v3 Key", store.apiKey, secret = true) { store.apiKey = it.trim() }
+        }
+        action(advanced, "＋ 添加单个视频", "粘贴视频链接，审核后单独允许") { addVideoFromLink() }
+        action(advanced, "管理已批准视频", "查看名称与移除视频") { manageApprovedVideos() }
+        action(advanced, "精确允许的视频 ID", "手动编辑，适合高级家长配置") {
             editLines("允许的视频 ID（每行 11 位）", store.allowedVideosText) {
                 store.allowedVideosText = it
             }
-        })
-        panel.addView(TvUi.button(this, "禁止的视频 ID") {
+        }
+        action(advanced, "禁止的视频 ID", "手动禁止特定视频") {
             editLines("禁止的视频 ID（每行 11 位）", store.blockedVideosText) {
                 store.blockedVideosText = it
             }
-        })
-        panel.addView(TvUi.button(this, "修改家长 PIN") { setPinDialog(initial = false) })
-        panel.addView(TvUi.button(this, "清除观看历史和收藏") {
+        }
+        action(advanced, "修改家长 PIN", "设置 4–12 位数字") { setPinDialog(initial = false) }
+        action(advanced, "清除历史与收藏", "不可撤销，请确认") {
             AlertDialog.Builder(this)
                 .setMessage("要清空本机的观看记录和收藏吗？")
                 .setNegativeButton("取消", null)
@@ -228,51 +313,50 @@ class SettingsActivity : Activity() {
                     WatchHistory(this).clear()
                     summary.text = "观看历史与收藏已清除"
                 }.show()
-        })
-        TvUi.space(panel, this, 12)
+        }
     }
 
     private fun buildNetworkSection(panel: LinearLayout) {
-        heading(panel, "网络代理", "启动 KidsTubeTV 自动连接，离开后自动断开；无需孩子操作。")
-        networkState = TvUi.label(this, "", 25f, true)
-        networkDetail = TvUi.label(this, "", 16f).apply { setTextColor(TvUi.muted) }
-        panel.addView(networkState)
-        panel.addView(networkDetail)
-        TvUi.space(panel, this, 18)
-
-        // Only two main actions; token entry appears in one dialog, not on every visit.
-        panel.addView(TvUi.primaryButton(this, "＋ 添加 / 更换 Clash 订阅") {
-            editSubscription()
-        })
-        TvUi.space(panel, this, 7)
-        panel.addView(TvUi.button(this, "◈  选择代理节点") {
-            startActivity(Intent(this, ProxyActivity::class.java))
-        })
-        TvUi.space(panel, this, 18)
-
-        val toggle = TvUi.button(this, "高级设置  ▾") {
-            networkAdvanced.visibility =
-                if (networkAdvanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        heading(panel, "VPN 与网络", "先连接网络，再浏览儿童视频。常用操作保留在当前屏幕。")
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(TvUi.dp(this@SettingsActivity, 18), TvUi.dp(this@SettingsActivity, 12),
+                TvUi.dp(this@SettingsActivity, 18), TvUi.dp(this@SettingsActivity, 12))
+            background = SettingsDecor.statusShape(this@SettingsActivity)
         }
-        panel.addView(toggle)
+        networkState = TvUi.label(this, "", 24f, true)
+        networkDetail = TvUi.label(this, "", 15f).apply { setTextColor(TvUi.muted) }
+        statusCard.addView(networkState)
+        statusCard.addView(networkDetail)
+        panel.addView(statusCard)
+        TvUi.space(panel, this, 14)
+
+        vpnTile = action(panel, "连接 VPN", "首次连接会出现 Android 系统 VPN 授权", true) {
+            connectOrTestVpn()
+        }
+        action(panel, "＋ 添加或更换 Clash 订阅", "粘贴手机传来的 HTTPS YAML 链接，无需直接编辑配置") {
+            editSubscription()
+        }
+        action(panel, "选择代理节点", "一键选择节点；通常可使用订阅默认策略") {
+            startActivity(Intent(this, ProxyActivity::class.java))
+        }
+        action(panel, "网络故障诊断", "查看 DNS、VPN、系统信息和排查提示") {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        TvUi.space(panel, this, 8)
         networkAdvanced = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
         }
+        expandButton(panel, "更多网络设置", networkAdvanced)
         panel.addView(networkAdvanced)
-        networkAdvanced.addView(TvUi.button(this, "立即更新当前订阅") {
-            if (store.subscriptionUrl.isBlank()) {
-                editSubscription()
-            } else {
-                downloadSubscription(store.subscriptionUrl)
-            }
-        })
-        networkAdvanced.addView(TvUi.button(this, "从 U 盘导入 Clash YAML") { importYaml() })
-        networkAdvanced.addView(TvUi.button(this, "订阅自动更新周期") { chooseRefreshInterval() })
-        networkAdvanced.addView(TvUi.button(this, "设备与网络诊断") {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        })
-        networkAdvanced.addView(TvUi.button(this, "恢复上一次 Clash 配置") {
+        action(networkAdvanced, "立即更新订阅", "保留现有配置，更新成功后下次连接生效") {
+            if (store.subscriptionUrl.isBlank()) editSubscription()
+            else downloadSubscription(store.subscriptionUrl)
+        }
+        action(networkAdvanced, "从 U 盘导入 YAML", "适合电视无法打开订阅链接的情况") { importYaml() }
+        action(networkAdvanced, "订阅自动更新周期", "关闭自动更新或设置更新间隔") { chooseRefreshInterval() }
+        action(networkAdvanced, "恢复上一次代理配置", "当前连接断开后可恢复本机备份") {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
                 ProxyStatus.phase == ProxyStatus.Phase.STARTING) {
                 networkDetail.text = "请先关闭 VPN，再恢复之前的配置"
@@ -286,37 +370,74 @@ class SettingsActivity : Activity() {
                     .setPositiveButton("恢复") { _, _ ->
                         val ok = store.restoreBackup()
                         networkState.text = if (ok) "✓ 已恢复上一版代理配置" else "⚠ 恢复失败"
-                        networkDetail.text = if (ok) "返回首页重新连接 VPN 以生效"
-                            else "文件恢复失败，当前配置未主动删除"
+                        networkDetail.text = if (ok) "重新连接 VPN 以生效" else "文件恢复失败"
                     }.show()
             }
-        })
-        networkAdvanced.addView(TvUi.button(this, "关闭当前 VPN") {
+        }
+        action(networkAdvanced, "断开 VPN", "手动暂停，不会在后台自动重新连接") {
             VpnManualPause.pause()
+            uiHandler.removeCallbacks(startVpnAfterStop)
             KidsVpnService.stop(this)
-            networkState.text = "家长已暂停 VPN，返回首页后不会自动连接"
-        })
-        TvUi.space(networkAdvanced, this, 12)
+            networkState.text = "家长已暂停 VPN"
+        }
+    }
+
+    private fun connectOrTestVpn() {
+        when (ProxyStatus.phase) {
+            ProxyStatus.Phase.READY -> {
+                if (ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
+                    networkState.text = "正在检测 Google 网络…"
+                    ProxyNetworkHealth.check(this)
+                } else {
+                    restartVpnFromParent()
+                }
+            }
+            ProxyStatus.Phase.STARTING -> networkState.text = "VPN 正在连接，请稍后"
+            else -> restartVpnFromParent()
+        }
+    }
+
+    private fun restartVpnFromParent() {
+        if (!store.hasProfile) {
+            networkDetail.text = "请先添加 Clash 订阅或从 U 盘导入配置"
+            return
+        }
+        VpnManualPause.resume()
+        uiHandler.removeCallbacks(startVpnAfterStop)
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
+            ProxyStatus.phase == ProxyStatus.Phase.STARTING) {
+            KidsVpnService.stop(this)
+            uiHandler.postDelayed(startVpnAfterStop, 1_000)
+        } else requestVpnFromParent()
+    }
+
+    private fun requestVpnFromParent() {
+        if (!ParentSession.authorized() || !store.hasProfile) return
+        val request = VpnService.prepare(this)
+        if (request == null) KidsVpnService.start(this)
+        else startActivityForResult(request, REQUEST_VPN_PERMISSION)
     }
 
     private fun buildAccountSection(panel: LinearLayout) {
-        heading(panel, "YouTube 账号", "Google 登录不是必需的；只有家长批准的频道会展示。")
+        heading(panel, "YouTube 账号", "无需孩子在电视上输入 Google 密码。授权与白名单只允许家长操作。")
         accountSummary = TvUi.label(this, "", 18f)
         panel.addView(accountSummary)
-        TvUi.space(panel, this, 12)
-        panel.addView(TvUi.primaryButton(this, "Google 账号授权 / 导入订阅") {
+        TvUi.space(panel, this, 16)
+        action(panel, "手机扫码登录 Google", "使用设备验证码，并由家长挑选允许的订阅频道", true) {
             startActivity(Intent(this, GoogleAccountActivity::class.java))
-        })
+        }
         panel.addView(TvUi.label(this,
-            "Google 验证码可在手机上完成，不需要使用电视遥控器输入账号密码。", 15f)
+            "不想登录也可以：在儿童内容的“更多管理”里填写 YouTube API Key。", 15f)
             .apply { setTextColor(TvUi.muted) })
     }
 
     private fun refreshSummaries() {
         summary.text = "儿童频道：" + store.allowedChannels.size + "   ·   今日已看 " +
             (WatchTime(this).elapsedSeconds() / 60) + " 分钟"
-        childSummary.text = "当前批准 " + store.allowedChannels.size + " 个频道  ·  每日 " +
-            store.dailyLimitMinutes + " 分钟"
+        childSummary.text = "已批准 " + store.allowedChannels.size + " 个频道 · " +
+            store.approvedVideoIds.size + " 个视频 · 每日 " + store.dailyLimitMinutes + " 分钟"
+        searchTile.setTitle("允许搜索  " + if (store.searchAllowed) "● 已开启" else "○ 已关闭")
+        autoplayTile.setTitle("自动播放下一集  " + if (store.autoplayNext) "● 已开启" else "○ 已关闭")
         val state = when (ProxyStatus.phase) {
             ProxyStatus.Phase.OFF -> "○ 未连接"
             ProxyStatus.Phase.STARTING -> "◌ 正在连接…"
@@ -337,6 +458,12 @@ class SettingsActivity : Activity() {
             " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
         } else ""
         networkDetail.text = source + time
+        vpnTile.setTitle(when (ProxyStatus.phase) {
+            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+                "重新连接 VPN" else "检测 VPN 网络"
+            ProxyStatus.Phase.STARTING -> "VPN 正在连接"
+            else -> "连接 VPN"
+        })
         accountSummary.text = if (GoogleTvAuth(this).isLinked) "Google 已授权（只读 YouTube 资料）"
             else "未登录 Google；也可使用 YouTube API Key 浏览"
     }
@@ -654,6 +781,11 @@ class SettingsActivity : Activity() {
     @Deprecated("Legacy storage document picker callback for Android TV 9")
     override fun onActivityResult(request: Int, code: Int, data: Intent?) {
         super.onActivityResult(request, code, data)
+        if (request == REQUEST_VPN_PERMISSION) {
+            if (code == RESULT_OK && ParentSession.authorized()) KidsVpnService.start(this)
+            else networkDetail.text = "Android VPN 授权被取消；再次选择连接即可重新授权"
+            return
+        }
         if (request != REQUEST_YAML) return
         val permitted = ParentSession.authorized()
         ParentSession.endExternalUi()
@@ -731,5 +863,6 @@ class SettingsActivity : Activity() {
     companion object {
         const val EXTRA_SECTION = "open_section"
         private const val REQUEST_YAML = 918
+        private const val REQUEST_VPN_PERMISSION = 919
     }
 }
