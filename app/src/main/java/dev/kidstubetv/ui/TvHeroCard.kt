@@ -26,7 +26,7 @@ object TvHeroCard {
             isFocusable = true
             isClickable = true
             tag = "menu-edge"
-            transitionName = "video:${video.id}"
+            transitionName = "hero:${video.id}"
             clipChildren = false
             clipToPadding = false
             background = TvUi.rounded(activity, 0xFF1C3640.toInt(), 22)
