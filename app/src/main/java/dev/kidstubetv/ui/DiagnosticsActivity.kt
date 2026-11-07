@@ -20,6 +20,7 @@ import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.proxy.ProxyNetworkHealth
 import dev.kidstubetv.proxy.ProxyStatus
 import dev.kidstubetv.proxy.ProxyDnsStatus
+import dev.kidstubetv.proxy.GoogleEndpointProbe
 
 /**
  * Troubleshooting for real Android 9 televisions. No credentials, subscription
@@ -78,6 +79,14 @@ class DiagnosticsActivity : Activity() {
                 message.text = "请先在家长中心连接 VPN，再检测连通性"
             }
         })
+        panel.addView(TvUi.button(this, "检查 Google OAuth / YouTube 真实 HTTPS 地址") {
+            message.text = "正在分别检测 Google OAuth 与 YouTube API 的 HTTPS 可达性…"
+            GoogleEndpointProbe.check { text ->
+                if (!isFinishing && !isDestroyed) {
+                    message.text = text
+                }
+            }
+        })
         panel.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
         panel.addView(TvUi.button(this, "复制不含密钥的诊断报告") {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -124,7 +133,9 @@ class DiagnosticsActivity : Activity() {
         appendLine("WebView: " + webViewVersion())
         appendLine("Mihomo 配置已导入: " + if (store.hasProfile) "是" else "否")
         appendLine("VPN: " + ProxyStatus.phase.name)
+        appendLine("VPN 阶段 / 最后状态: " + ProxyStatus.detail)
         appendLine("VPN HTTPS 检测: " + ProxyNetworkHealth.state.name)
+        appendLine("探测地址状态: " + ProxyNetworkHealth.diagnostic)
         appendLine("底层网络 DNS 数量: " + ProxyDnsStatus.underlyingCount +
             if (ProxyDnsStatus.underlyingCount == 0) " (VPN 可能无法解析域名)" else "")
         appendLine("Google / YouTube API 已配置: " + if (store.hasYouTubeAuth) "是" else "否")

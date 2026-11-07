@@ -27,7 +27,7 @@ class KidsVpnService : VpnService() {
     private fun tunCallbacks(sessionId: Long) = object : NativeTunCallbacks {
         override fun protectSocket(fd: Int): Boolean {
             val success = this@KidsVpnService.protect(fd)
-            if (!success) main.post { fail("VPN socket protection failed", sessionId) }
+            if (!success) main.post { fail("VPN_PROTECT_FAILED：内核套接字保护失败", sessionId) }
             return success
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
@@ -72,10 +72,10 @@ class KidsVpnService : VpnService() {
                     ProxyNetworkHealth.reset(this)
                     try {
                         ensureForeground()
-                        ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "Initializing Mihomo")
+                        ProxyStatus.update(this, ProxyStatus.Phase.STARTING, "VPN_CORE_STARTING：正在加载代理配置")
                         startCoreAsync(sessionId)
                     } catch (_: Throwable) {
-                        fail("Unable to start foreground VPN", sessionId)
+                        fail("VPN_FOREGROUND_FAILED：无法启动 VPN 前台服务", sessionId)
                     }
                 }
             }
@@ -98,7 +98,7 @@ class KidsVpnService : VpnService() {
                     main.post {
                         if (!isCurrent(sessionId)) return@post
                         if (!error.isNullOrEmpty()) {
-                            fail("代理配置未被 FlClash 内核接受，请检查 YAML 和节点", sessionId)
+                            fail(VpnFailurePolicy.fromSetup(error), sessionId)
                         } else {
                             // Official core's "system" DNS has no Android fallback.
                             // Give it physical network DNS, not our own TUN DNS.
@@ -106,14 +106,13 @@ class KidsVpnService : VpnService() {
                                 startDnsMonitor(sessionId)
                                 establishTun(sessionId)
                             } catch (cause: Throwable) {
-                                fail("VPN 网络初始化失败：" +
-                                    (cause.javaClass.simpleName), sessionId)
+                                fail(VpnFailurePolicy.fromException(cause, "DNS"), sessionId)
                             }
                         }
                     }
                 }
             } catch (error: Throwable) {
-                main.post { fail(error.message ?: error.javaClass.simpleName, sessionId) }
+                main.post { fail(VpnFailurePolicy.fromException(error, "SETUP"), sessionId) }
             }
         }, "kidstubetv-mihomo-init").start()
     }
@@ -152,12 +151,12 @@ class KidsVpnService : VpnService() {
                 "Native proxy core refused the TUN descriptor"
             }
             tunStarted = true
-            ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN tunnel started")
+            ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN_TUN_ESTABLISHED：隧道启动成功，等待接口检测")
             ProxyNetworkHealth.check(applicationContext)
             // Update only after the app-only VPN exists. New YAML takes effect next start.
             SubscriptionUpdater.updateIfDue(applicationContext)
         } catch (error: Throwable) {
-            fail(error.message ?: "Unable to start TUN", sessionId)
+            fail(VpnFailurePolicy.fromException(error, "TUN"), sessionId)
         }
     }
 
@@ -200,7 +199,7 @@ class KidsVpnService : VpnService() {
         if (cleanup.isFailure) {
             failed = true
             ProxyStatus.update(this, ProxyStatus.Phase.ERROR,
-                "Native proxy cleanup failed")
+                "VPN_CLEANUP_FAILED：原生网络资源清理失败")
         } else if (!failed) {
             ProxyStatus.update(this, ProxyStatus.Phase.OFF, "Disconnected")
         }
