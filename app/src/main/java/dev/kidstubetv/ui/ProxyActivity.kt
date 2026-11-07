@@ -49,6 +49,7 @@ class ProxyActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        UiDevice.showSystemBarsForHandheld(this)
         if (!SettingsStore(this).hasPin || !ParentSession.authorized()) { finish(); return }
         val page = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
         content = TvUi.column(this)

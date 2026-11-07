@@ -271,8 +271,8 @@ class GoogleAccountActivity : Activity() {
                     if (cancelled.get() || !ParentSession.authorized()) return@setOnClickListener
                     copyDeviceCode(challenge.userCode)
                     val url = challenge.verificationUrl
-                    if (!url.startsWith("https://")) {
-                        status.text = "Google 授权网址不是 HTTPS，已取消跳转"
+                    if (!GoogleVerificationUrlPolicy.isOfficial(url)) {
+                        status.text = "Google 授权网址未通过安全检查，已取消跳转"
                         return@setOnClickListener
                     }
                     // The Android browser is outside this app-only VPN.
