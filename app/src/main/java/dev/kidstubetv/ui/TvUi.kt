@@ -29,7 +29,9 @@ internal object TvUi {
 
     fun column(ctx: Context) = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(ctx, 28), dp(ctx, 20), dp(ctx, 28), dp(ctx, 20))
+        val padding = if (UiDevice.isHandheld(ctx)) 16 else 28
+        setPadding(dp(ctx, padding), dp(ctx, if (UiDevice.isHandheld(ctx)) 14 else 20),
+            dp(ctx, padding), dp(ctx, 20))
         setBackgroundColor(bg)
     }
 

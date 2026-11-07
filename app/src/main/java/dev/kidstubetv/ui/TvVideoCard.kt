@@ -18,6 +18,7 @@ object TvVideoCard {
 
     fun make(activity: Activity, video: KidVideo, widthPixels: Int, onClick: () -> Unit): View {
         val height = (widthPixels * 9f / 16f).toInt()
+        val handheld = UiDevice.isHandheld(activity)
         val item = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             isFocusable = true
@@ -43,12 +44,12 @@ object TvVideoCard {
             addView(image, android.widget.FrameLayout.LayoutParams(-1, -1))
         }
         item.addView(imageHolder, LinearLayout.LayoutParams(-1, height))
-        val title = TvUi.label(activity, video.title, 19f).apply {
+        val title = TvUi.label(activity, video.title, if (handheld) 15f else 19f).apply {
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
         }
         item.addView(title)
-        item.addView(TvUi.label(activity, video.channelTitle, 13f).apply {
+        item.addView(TvUi.label(activity, video.channelTitle, if (handheld) 12f else 13f).apply {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setTextColor(TvUi.muted)

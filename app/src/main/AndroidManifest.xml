@@ -14,18 +14,18 @@
         android:banner="@drawable/tv_banner"
         android:theme="@style/KidsTubeTheme"
         android:usesCleartextTraffic="false">
-        <activity android:name=".ui.MainActivity" android:exported="true" android:screenOrientation="landscape">
+        <activity android:name=".ui.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name=".ui.SettingsActivity" android:exported="false" android:screenOrientation="landscape"/>
-        <activity android:name=".ui.GoogleAccountActivity" android:exported="false" android:screenOrientation="landscape"/>
-        <activity android:name=".ui.DiagnosticsActivity" android:exported="false" android:screenOrientation="landscape"/>
-        <activity android:name=".ui.ProxyActivity" android:exported="false" android:screenOrientation="landscape"/>
-        <activity android:name=".ui.PlayerActivity" android:exported="false" android:screenOrientation="landscape"/>
+        <activity android:name=".ui.SettingsActivity" android:exported="false"/>
+        <activity android:name=".ui.GoogleAccountActivity" android:exported="false"/>
+        <activity android:name=".ui.DiagnosticsActivity" android:exported="false"/>
+        <activity android:name=".ui.ProxyActivity" android:exported="false"/>
+        <activity android:name=".ui.PlayerActivity" android:exported="false"/>
         <service
             android:name=".proxy.KidsVpnService"
             android:exported="true"

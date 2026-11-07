@@ -21,7 +21,8 @@ import dev.kidstubetv.data.KidVideo
  */
 object TvHeroCard {
     fun make(activity: Activity, video: KidVideo, section: String, play: () -> Unit): View {
-        val radius = TvUi.dp(activity, 22).toFloat()
+        val compact = UiDevice.dimensions(activity).compactHero
+        val radius = TvUi.dp(activity, if (compact) 16 else 22).toFloat()
         val root = FrameLayout(activity).apply {
             isFocusable = true
             isClickable = true
@@ -62,32 +63,37 @@ object TvHeroCard {
         val copy = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(TvUi.dp(activity, 42), TvUi.dp(activity, 26),
-                TvUi.dp(activity, 10), TvUi.dp(activity, 26))
+            setPadding(TvUi.dp(activity, if (compact) 18 else 42),
+                TvUi.dp(activity, if (compact) 12 else 26),
+                TvUi.dp(activity, if (compact) 16 else 10),
+                TvUi.dp(activity, if (compact) 12 else 26))
             isFocusable = false
         }
-        val eyebrow = TvUi.label(activity, "✦  " + section, 18f, true)
+        val eyebrow = TvUi.label(activity, "✦  " + section, if (compact) 13f else 18f, true)
         copy.addView(eyebrow)
-        val title = TvUi.label(activity, video.title, 35f).apply {
-            maxLines = 3
+        val title = TvUi.label(activity, video.title, if (compact) 23f else 35f).apply {
+            maxLines = if (compact) 2 else 3
             ellipsize = TextUtils.TruncateAt.END
             setTypeface(typeface, Typeface.BOLD)
         }
         copy.addView(title)
-        val channel = TvUi.label(activity, video.channelTitle, 17f).apply {
+        val channel = TvUi.label(activity, video.channelTitle, if (compact) 13f else 17f).apply {
             setTextColor(0xFFD2DED9.toInt())
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
         copy.addView(channel)
-        TvUi.space(copy, activity, 19)
-        val action = TvUi.label(activity, "▶  按确定播放", 20f).apply {
+        TvUi.space(copy, activity, if (compact) 4 else 19)
+        val action = TvUi.label(activity,
+            if (UiDevice.isHandheld(activity)) "▶  轻触播放" else "▶  按确定播放",
+            if (compact) 15f else 20f).apply {
             setTextColor(TvUi.warm)
             setTypeface(typeface, Typeface.BOLD)
         }
         copy.addView(action)
         root.addView(copy, FrameLayout.LayoutParams(
-            TvUi.dp(activity, 535), -1, Gravity.START or Gravity.CENTER_VERTICAL
+            if (UiDevice.isHandheld(activity)) -1 else TvUi.dp(activity, 535),
+            -1, Gravity.START or Gravity.CENTER_VERTICAL
         ))
 
         root.setOnFocusChangeListener { _, focused ->
