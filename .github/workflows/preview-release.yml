@@ -63,6 +63,8 @@ jobs:
             the app still refuses direct Google calls before VPN is established.
           - More actionable VPN errors, endpoint diagnostics, Google OAuth setup and API quota feedback.
           - Parent homepage now lists missing setup steps instead of a generic empty screen.
+          - SmartTube-inspired in-place home refresh with focus retention, 30-minute TTL,
+            5-minute failure cooldown, image fallback, and manual approved-video retry.
           - Native VPN functionality remains unverified on a physical TV.
 
           **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.

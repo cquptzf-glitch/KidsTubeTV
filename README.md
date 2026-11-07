@@ -95,3 +95,9 @@
 - 诊断可以分别检测 Google OAuth 和 YouTube API 的 HTTPS 连通性，并显示脱敏的 VPN 错误类别；儿童首页显示尚未完成的配置步骤。
 
 这是使用临时 GitHub Actions Debug 签名的预览版。真实 Android TV 上的原生 TUN、DNS/IPv6、OAuth 与 IFrame 行为尚需测试，不能以 Lint 与 APK 可编译代替验收。
+
+## SmartTube 源码参考（2026-11-07）
+
+参考 [SmartTube](https://github.com/yuliskov/SmartTube) 与 [MediaServiceCore](https://github.com/yuliskov/MediaServiceCore) 的电视登录、刷新、焦点与播放架构。本轮已自行实现带过期/失败退避的首页刷新、保留旧内容及遥控器焦点、封面尺寸缓存与失败回退，以及经过二次儿童内容审核的播放器手动重试。
+
+**没有直接移植 SmartTube 的 YouTube 私有接口、账号凭据、完整 ExoPlayer 或第三方媒体解析器。** 项目仍使用自己的 Google Cloud TV OAuth、官方 YouTube Data API 子集和 IFrame。实现与风险详见 [SmartTube 移植评估](docs/SMARTTUBE_PORTING_REVIEW.md)。
