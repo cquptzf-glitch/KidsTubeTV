@@ -432,13 +432,16 @@ class MainActivity : Activity() {
             if (Thread.currentThread().isInterrupted) return@submit
             runOnUiThread {
                 if (isFinishing || request != nextRequest || !::list.isInitialized) return@runOnUiThread
+                // Even if VPN disappears during an asynchronous fetch, clear
+                // the in-flight latch or the next READY event cannot load home.
+                catalogLoading = false
+                refreshIndicator.visibility = View.GONE
                 if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                    loadedAfterConnection = false
                     showPlaceholder()
                     updateVpnChrome()
                     return@runOnUiThread
                 }
-                catalogLoading = false
-                refreshIndicator.visibility = View.GONE
                 result.onSuccess { videos ->
                     renderCollection(name, videos, reuseOldView)
                     if (key == "home") refreshPolicy.onSuccessfulRefresh()
