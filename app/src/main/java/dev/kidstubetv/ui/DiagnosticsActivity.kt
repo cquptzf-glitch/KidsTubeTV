@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.View
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -47,6 +48,7 @@ class DiagnosticsActivity : Activity() {
     private val store by lazy { SettingsStore(this) }
     private lateinit var report: TextView
     private lateinit var message: TextView
+    private lateinit var advanced: LinearLayout
     private val credentialProbeGate = LatestResultGate()
     private var credentialProbeInFlight = false
     private var credentialProbeResult = "未检测"
@@ -62,21 +64,37 @@ class DiagnosticsActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        UiDevice.showSystemBarsForHandheld(this)
         if (!store.hasPin || !ParentSession.authorized()) { finish(); return }
         val scroller = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
         val panel = TvUi.column(this)
         scroller.addView(panel)
         setContentView(scroller)
-        panel.addView(TvUi.label(this, "设备与网络诊断", 29f, true))
-        panel.addView(TvUi.label(this, "仅供家长调试。不会复制订阅链接、账号令牌或观看历史。", 16f))
+        panel.addView(TvUi.label(this, "一键诊断",
+            if (UiDevice.isHandheld(this)) 24f else 29f, true))
+        panel.addView(TvUi.label(this, "先检测 VPN 和 Google 接口，再检查账号凭据。", 16f))
         TvUi.space(panel, this, 10)
-        report = TvUi.label(this, "", 17f).apply {
+        panel.addView(TvUi.primaryButton(this, "▶ 开始一键检测") {
+            runQuickDiagnostic()
+        })
+        message = TvUi.label(this, "点击开始检测；不会上传密钥或观看记录。", 16f)
+        panel.addView(message)
+        TvUi.space(panel, this, 16)
+        panel.addView(TvUi.button(this, "展开详细诊断 ▾") {
+            advanced.visibility = if (advanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        })
+        advanced = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        panel.addView(advanced)
+        report = TvUi.label(this, "", 15f).apply {
             setTextColor(TvUi.text)
             setTextIsSelectable(true)
         }
-        panel.addView(report)
-        TvUi.space(panel, this, 12)
-        panel.addView(TvUi.primaryButton(this, "检测 Google HTTPS 连通性") {
+        advanced.addView(report)
+        TvUi.space(advanced, this, 12)
+        advanced.addView(TvUi.button(this, "仅检测 Google HTTPS 连通性") {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
                 message.text = "检测已开始，通常几秒内显示结果…"
                 ProxyNetworkHealth.check(this)
@@ -84,7 +102,7 @@ class DiagnosticsActivity : Activity() {
                 message.text = "请先在家长中心连接 VPN，再检测连通性"
             }
         })
-        panel.addView(TvUi.button(this, "检查 Google OAuth / YouTube 真实 HTTPS 地址") {
+        advanced.addView(TvUi.button(this, "检查 Google OAuth / YouTube HTTPS 地址") {
             message.text = "正在分别检测 Google OAuth 与 YouTube API 的 HTTPS 可达性…"
             GoogleEndpointProbe.check { text ->
                 if (!isFinishing && !isDestroyed) {
@@ -92,45 +110,76 @@ class DiagnosticsActivity : Activity() {
                 }
             }
         })
-        panel.addView(TvUi.button(this, "检查 YouTube API Key / OAuth 凭据（真实接口）") {
-            if (credentialProbeInFlight) {
-                message.text = "已有一次 API 检查在进行中"
-            } else if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
-                message.text = "VPN 尚未启动，不会直连 Google"
-            } else if (!store.hasYouTubeAuth) {
-                message.text = "尚未配置 YouTube API Key 或 Google TV 登录"
-            } else {
-                val request = credentialProbeGate.begin()
-                credentialProbeInFlight = true
-                message.text = "正在检查 YouTube Data API v3 的真实认证接口…"
-                Thread({
-                    val outcome = runCatching {
-                        YouTubeRepository(store).checkApiCredentials()
-                    }
-                    runOnUiThread {
-                        credentialProbeInFlight = false
-                        if (isFinishing || isDestroyed || !ParentSession.authorized() ||
-                            !credentialProbeGate.isCurrent(request)) return@runOnUiThread
-                        credentialProbeResult = outcome.fold(
-                            { "成功：API 凭据与该接口可用（不代表 IFrame 播放成功）" },
-                            { ApiProbeErrorPolicy.describe(it) }
-                        )
-                        message.text = credentialProbeResult
-                        refresh()
-                    }
-                }, "kids-youtube-credential-probe").start()
-            }
+        advanced.addView(TvUi.button(this, "仅检查 YouTube API 凭据") {
+            checkApiCredential()
         })
-        panel.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
+        advanced.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
         panel.addView(TvUi.button(this, "复制不含密钥的诊断报告") {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("KidsTubeTV diagnostics", safeReport()))
             message.text = "已复制，可粘贴给开发者排查。"
         })
         panel.addView(TvUi.button(this, "返回网络设置") { finish() })
-        message = TvUi.label(this, "", 16f).apply { setTextColor(TvUi.muted) }
-        panel.addView(message)
         refresh()
+    }
+
+    private fun runQuickDiagnostic() {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+            message.text = "✖ VPN 未连接：请返回家长设置，先添加 Clash 订阅并连接 VPN"
+            refresh()
+            return
+        }
+        message.text = "① VPN 已启动，检测 Google OAuth 与 YouTube HTTPS…"
+        ProxyNetworkHealth.check(this)
+        GoogleEndpointProbe.check { https ->
+            if (isFinishing || isDestroyed || !ParentSession.authorized()) return@check
+            if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                message.text = "检测期间 VPN 断开；请重新连接后再试"
+                return@check
+            }
+            if (!store.hasYouTubeAuth) {
+                message.text = "① HTTPS 检查：\n" + https +
+                    "\n② 未配置 YouTube API Key / Google OAuth，先完成家长设置"
+                refresh()
+                return@check
+            }
+            message.text = "① HTTPS 检查：\n" + https + "\n② 正在验证 YouTube API 凭据…"
+            checkApiCredential(prefix = "① HTTPS 检查：\n" + https + "\n② ")
+        }
+    }
+
+    private fun checkApiCredential(prefix: String = "") {
+        if (credentialProbeInFlight) {
+            message.text = "已有一次 API 检查在进行中"
+            return
+        }
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+            message.text = "VPN 尚未启动，不会直连 Google"
+            return
+        }
+        if (!store.hasYouTubeAuth) {
+            message.text = "尚未配置 YouTube API Key 或 Google TV 登录"
+            return
+        }
+        val request = credentialProbeGate.begin()
+        credentialProbeInFlight = true
+        message.text = prefix + "正在检查 YouTube Data API v3 的真实认证接口…"
+        Thread({
+            val outcome = runCatching {
+                YouTubeRepository(store).checkApiCredentials()
+            }
+            runOnUiThread {
+                credentialProbeInFlight = false
+                if (isFinishing || isDestroyed || !ParentSession.authorized() ||
+                    !credentialProbeGate.isCurrent(request)) return@runOnUiThread
+                credentialProbeResult = outcome.fold(
+                    { "成功：API 凭据与该接口可用（不代表 IFrame 播放成功）" },
+                    { ApiProbeErrorPolicy.describe(it) }
+                )
+                message.text = prefix + credentialProbeResult
+                refresh()
+            }
+        }, "kids-youtube-credential-probe").start()
     }
 
     override fun onStart() {
@@ -158,7 +207,7 @@ class DiagnosticsActivity : Activity() {
     }.getOrDefault("WebView 版本读取失败")
 
     private fun safeReport(): String = buildString {
-        appendLine("KidsTubeTV · TV 诊断")
+        appendLine("KidsTubeTV · 手机/电视诊断")
         appendLine("App 版本: " + runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrDefault("未知"))
