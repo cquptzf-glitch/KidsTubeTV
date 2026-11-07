@@ -14,6 +14,13 @@ class SystemDnsPolicyTest {
             )
         )
     }
+    @Test fun matchesFlClashOfficialSocketAddressDnsFormat() {
+        assertEquals(
+            "192.168.1.1:53,[2001:4860:4860::8888]:53",
+            SystemDnsPolicy.coreArgument(listOf("192.168.1.1", "2001:4860:4860::8888"))
+        )
+        assertEquals("", SystemDnsPolicy.coreArgument(emptyList()))
+    }
     @Test fun handlesMissingConnectivitySafely() {
         assertEquals(emptyList<String>(), SystemDnsPolicy.normalize(emptyList(), "198.18.0.2"))
     }

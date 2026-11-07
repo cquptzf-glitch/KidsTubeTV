@@ -14,4 +14,13 @@ internal object SystemDnsPolicy {
             }
             .distinct()
             .take(8)
+
+    /**
+     * FlClash Android NetworkObserver passes IP:53 rather than bare IP to
+     * Core.updateDNS. Brackets are required for IPv6 socket addresses.
+     * Source inputs are IP literals from Android LinkProperties, not hostnames.
+     */
+    fun coreArgument(servers: List<String>): String = servers.joinToString(",") { address ->
+        if (':' in address) "[$address]:53" else "$address:53"
+    }
 }
