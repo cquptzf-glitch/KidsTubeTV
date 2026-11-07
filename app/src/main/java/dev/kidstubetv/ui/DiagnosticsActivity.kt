@@ -211,6 +211,12 @@ class DiagnosticsActivity : Activity() {
         appendLine("App 版本: " + runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrDefault("未知"))
+        appendLine("已安装包名: " + packageName)
+        appendLine("安装渠道: " + if (packageName.contains(".preview."))
+            "独立测试版（无法覆盖其他 beta；允许与旧版并存）"
+        else if (packageName.endsWith(".preview"))
+            "固定密钥测试版（可使用相同签名升级）"
+        else "标准包名（升级必须使用同一签名证书）"
         appendLine("Android: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")")
         appendLine("设备: " + Build.MANUFACTURER + " / " + Build.MODEL)
         appendLine("ABI: " + Build.SUPPORTED_ABIS.take(5).joinToString())

@@ -6,6 +6,15 @@ plugins {
 val kidsTubeOfficialCore = providers.gradleProperty("kidsTubeOfficialCore")
     .map(String::toBoolean).getOrElse(false)
 
+// Preview APKs use a separate app ID so a test install does not overwrite
+// an older build with an unrelated, ephemeral GitHub-hosted debug signature.
+// The package suffix is injected only by CI; normal release IDs are unchanged.
+val previewPackageSuffix = System.getenv("KIDSTUBE_PREVIEW_PACKAGE_SUFFIX").orEmpty()
+require(previewPackageSuffix.isEmpty() ||
+    Regex("\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*").matches(previewPackageSuffix)) {
+    "Invalid preview package suffix"
+}
+
 android {
     namespace = "dev.kidstubetv"
     sourceSets {
@@ -15,7 +24,9 @@ android {
     }
     compileSdk = 36
     defaultConfig {
-        applicationId = "dev.kidstubetv"
+        applicationId = "dev.kidstubetv" + previewPackageSuffix
+        manifestPlaceholders["kidsTubeAppLabel"] = if (previewPackageSuffix.isEmpty())
+            "KidsTubeTV" else "KidsTubeTV 测试版"
         minSdk = 28
         targetSdk = 32 // Sideload-first TV build; target SDK upgrades audited separately
         versionCode = System.getenv("KIDSTUBE_VERSION_CODE")?.toIntOrNull() ?: 2
@@ -23,6 +34,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
+        val previewKeystore = System.getenv("KIDSTUBE_PREVIEW_KEYSTORE_FILE")
+        if (!previewKeystore.isNullOrBlank()) {
+            create("previewStable") {
+                storeFile = file(previewKeystore)
+                storePassword = System.getenv("KIDSTUBE_PREVIEW_STORE_PASSWORD")
+                keyAlias = System.getenv("KIDSTUBE_PREVIEW_KEY_ALIAS")
+                keyPassword = System.getenv("KIDSTUBE_PREVIEW_KEY_PASSWORD")
+            }
+        }
         val keystore = System.getenv("KIDSTUBE_KEYSTORE_FILE")
         if (!keystore.isNullOrBlank()) {
             create("production") {
@@ -34,6 +54,12 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // GitHub Secrets can provide a stable, privately held preview key.
+            // With no key the default Android debug signer remains available,
+            // but CI must use a VERSION-SCOPED app ID to avoid update conflicts.
+            signingConfigs.findByName("previewStable")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = false
             signingConfigs.findByName("production")?.let { signingConfig = it }
