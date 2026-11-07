@@ -4,7 +4,7 @@
 
 ## 1. 安装前须知
 
-- 从 [v0.3.0-beta.7 Release](https://github.com/cquptzf-glitch/KidsTubeTV/releases/tag/v0.3.0-beta.7) 获取带 `FlClash` 标识的预览 APK；安装后应该在普通手机应用列表里看到 KidsTubeTV。
+- 从 [v0.3.0-beta.8 Release](https://github.com/cquptzf-glitch/KidsTubeTV/releases/tag/v0.3.0-beta.8) 获取带 `FlClash` 标识的预览 APK；安装后应该在普通手机应用列表里看到 KidsTubeTV。
 - APK 使用 GitHub Actions 临时 Debug 签名，不保证与 beta.6 可覆盖更新。Android 若提示签名不匹配，先**在自己的安全位置记录 Clash 订阅、Google Cloud 凭据配置、家长批准列表**，再卸载旧版。应用设置 `allowBackup=false`，不要假设系统备份可恢复内部配置，也不要将密钥发给开发者或聊天。
 - Android 同时通常只允许一个 VPN：启用 KidsTubeTV VPN 时可能会断开另一款 VPN；且只有 KidsTubeTV 自身 App 被添加到 VPN 路由，手机外部浏览器**不经过**该应用的 VPN。仍需通过自己的网络确保浏览器可访问 Google。
 
@@ -36,7 +36,7 @@
 ## 4. 有线 ADB 方式（可选）
 
 ```bash
-adb install -r KidsTubeTV-v0.3.0-beta.7-FlClash-PREVIEW.apk
+adb install -r KidsTubeTV-v0.3.0-beta.8-FlClash-PREVIEW.apk
 adb shell am start -n dev.kidstubetv/.ui.MainActivity
 adb logcat -d -s AndroidRuntime:E
 ```
@@ -48,3 +48,11 @@ adb logcat -d -s AndroidRuntime:E
 - 当前 CI 只做 Lint、JVM 单测、Debug APK 打包与原生 FlClash 核心构建。没有连接你的真实手机或电视，也没有执行真实 VPN / OAuth / IFrame 的端到端测试。
 - “HTTPS 可达”不等于“API Key 通过”，而“API Key 通过”仍不等于“视频嵌入正常播放”。诊断逐项提示，别把某一步成功当作整体完成。
 - 如果手机/电视的 Google 网页不可达，先检查物理网络、系统 VPN 互斥、Android WebView 与 TV Google 授权客户端；不建议复制 SmartTube 第三方 OAuth Client Secret。
+
+## beta.8 订阅下载失败专项验证
+
+1. 网络 VPN 页面，打开“Clash 订阅地址 · 查看 / 编辑 / 复制”，确认已保存地址为**普通文本**，可以用复制按钮或长按选择；不要向开发者透露订阅 token。
+2. 粘贴自己可用的 HTTPS Clash/Mihomo 地址，按“保存并更新”。下载成功后检查提示；原 VPN 若在运行，选择“立即应用”才会重连。
+3. 按“↻ 更新已保存的订阅”，确认无需再次输入。模拟断网/使用不可达域名，确认出现 DNS/超时分类并且之前已保存的 YAML 未被覆盖。
+4. 若更新失败，检查页面是否显现“从文件导入 Clash YAML（备用）”，并从手机文件管理器的下载目录打开自己的 YAML；它也需要符合本程序安全校验。
+5. 用服务商官方客户端比较订阅下载可用性，核对地址是否已经过期或采用非 Clash 格式；不要为了显示成功而关闭危险的配置校验。

@@ -2,7 +2,7 @@ name: KidsTubeTV preview release (official FlClash core)
 on:
   push:
     branches:
-      - "publish-preview/v0.3.0-beta.7"
+      - "publish-preview/v0.3.0-beta.8"
 permissions:
   contents: write
 jobs:
@@ -35,22 +35,22 @@ jobs:
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
       - name: Lint, unit tests and compile preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.7
-          KIDSTUBE_VERSION_CODE: 9
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.8
+          KIDSTUBE_VERSION_CODE: 10
         run: |
           gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
           mkdir -p dist/release
-          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.7-FlClash-PREVIEW.apk
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.8-FlClash-PREVIEW.apk
           cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
           cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
           ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
       - name: Prepare preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## KidsTubeTV v0.3.0-beta.7 (TV + Android phone developer preview)
+          ## KidsTubeTV v0.3.0-beta.8 (TV + Android phone developer preview)
 
           - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
           - Embedded official FlClash v0.9.3 core built from pinned upstream source.
@@ -98,6 +98,23 @@ jobs:
             API verification, keeping detailed reports collapsed by default.
           - Added responsive layout and setup-flow unit tests, plus a phone
             testing checklist in docs/MOBILE_VALIDATION.md.
+          - Clash subscription URL is now visible (not a password field) only
+            in the PIN-protected parent editor, with copy, paste, save-only and
+            save-and-refresh actions; no full tokens in standard diagnostics.
+          - Added one-tap retry for saved subscriptions and contextual local
+            YAML import from Android Downloads/USB when online download fails.
+          - Provider requests use common Clash User-Agent values with one
+            bounded compatibility fallback for HTTP 403/406 or wrong format,
+            and safely handle gzip and HTTPS redirects.
+          - Classify HTTP/auth, timeout, DNS, TLS, HTML/Base64, unsafe YAML
+            and oversized profile errors without echoing private URL tokens.
+          - Allow up to 4 MiB of bounded Clash YAML rather than 1 MiB;
+            retain the last working profile on unsuccessful refresh.
+          - Automatic updates now retain sanitized failure diagnostics for
+            the next parent settings visit; updated providers are eligible
+            for retry without inheriting the old URL's refresh timestamp.
+          - Expanded fake HTTPS response, User-Agent, redirect, gzip and
+            error-redaction JVM regression tests.
           - Native VPN functionality remains unverified on physical TV and phone.
 
           **IMPORTANT:** This is a test-only, Android 9+ phone/TV sideload preview, not a stable or production-signed release.
@@ -113,9 +130,9 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.7
+          tag_name: v0.3.0-beta.8
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.7 — Android TV + phone preview
+          name: KidsTubeTV v0.3.0-beta.8 — Android TV + phone preview
           prerelease: true
           draft: false
           generate_release_notes: false
