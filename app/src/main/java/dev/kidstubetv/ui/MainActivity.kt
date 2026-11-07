@@ -55,6 +55,12 @@ class MainActivity : Activity() {
     }
     private var catalogTask: Future<*>? = null
     private var loadedAfterConnection = false
+    private val refreshPolicy = CatalogRefreshPolicy()
+    private var catalogLoading = false
+    private var renderedCollectionKey = ""
+    private var renderedSignature = ""
+    private var refreshCurrentSection: (() -> Unit)? = null
+    private lateinit var refreshIndicator: TextView
     private var consentPending = false
     private var consentDeclined = false
     private val recoveryPolicy = VpnRecoveryPolicy()
@@ -74,6 +80,7 @@ class MainActivity : Activity() {
                 ProxyNetworkHealth.check(this@MainActivity)
             }
             evaluateVpnRecovery()
+            maybeRefreshHome()
             mainHandler.postDelayed(this, 25_000)
         }
     }
@@ -123,6 +130,10 @@ class MainActivity : Activity() {
         if (signature != lastContentSignature) {
             lastContentSignature = signature
             loadedAfterConnection = false
+            refreshPolicy.invalidate()
+            renderedCollectionKey = ""
+            renderedSignature = ""
+            refreshCurrentSection = null
             buildDrawer()
             showPlaceholder()
         }
@@ -135,7 +146,10 @@ class MainActivity : Activity() {
             !recoveryPolicy.exhausted) {
             requestVpn()
         }
-        if (ProxyStatus.phase == ProxyStatus.Phase.READY) loadDefaultOnce()
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+            loadDefaultOnce()
+            maybeRefreshHome()
+        }
     }
 
     override fun onStop() {
@@ -146,6 +160,8 @@ class MainActivity : Activity() {
         nextRequest++
         catalogTask?.cancel(true)
         catalogTask = null
+        catalogLoading = false
+        if (::refreshIndicator.isInitialized) refreshIndicator.visibility = View.GONE
         super.onStop()
     }
 
@@ -167,6 +183,12 @@ class MainActivity : Activity() {
         status = TvUi.label(this, "● 网络检测中", 13f).apply {
             setTextColor(TvUi.muted)
         }
+        refreshIndicator = TvUi.label(this, "↻ 正在更新…", 13f).apply {
+            visibility = View.GONE
+            setTextColor(TvUi.warm)
+            setPadding(0, 0, TvUi.dp(this@MainActivity, 12), 0)
+        }
+        top.addView(refreshIndicator)
         top.addView(status)
         body.addView(top, LinearLayout.LayoutParams(-1, TvUi.dp(this, 49)))
 
@@ -247,6 +269,10 @@ class MainActivity : Activity() {
         })
         TvUi.space(drawer, this, 15)
         addDrawerItem("⌂  首页") { loadDefault(force = true) }
+        addDrawerItem("↻  刷新当前内容") {
+            drawerFocus?.takeIf { it.isAttachedToWindow }?.requestFocus()
+            refreshCurrentSection?.invoke() ?: loadDefault(force = true)
+        }
         addDrawerItem("♫  英语儿歌") {
             loadCollection("songs", "英语儿歌") {
                 YouTubeRepository(settings).search("English nursery rhymes preschool")
@@ -349,21 +375,35 @@ class MainActivity : Activity() {
     }
 
     private fun loadDefaultOnce() {
-        if (!loadedAfterConnection && settings.ready) {
+        if (!loadedAfterConnection && settings.ready && !catalogLoading) {
             loadedAfterConnection = true
             loadDefault(force = true)
         }
     }
 
-    private fun loadDefault(force: Boolean = false) {
+    /** SmartTube-style stale refresh: never discard a working TV screen while loading. */
+    private fun maybeRefreshHome() {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY || !settings.ready ||
+            catalogLoading || showCollectionKey != "home" ||
+            renderedCollectionKey != "home" || !refreshPolicy.shouldRefresh()) return
+        loadDefault(force = true, preserveExisting = true)
+    }
+
+    private fun loadDefault(force: Boolean = false, preserveExisting: Boolean = false) {
         if (!force && showCollectionKey == "home" && loadedAfterConnection) return
-        loadCollection("home", "为你挑选") {
+        loadCollection("home", "为你挑选", preserveExisting) {
             YouTubeRepository(settings).homeFeed()
         }
     }
 
-    private fun loadCollection(key: String, name: String, loader: () -> List<KidVideo>) {
+    private fun loadCollection(
+        key: String, name: String, preserveExisting: Boolean = false,
+        loader: () -> List<KidVideo>
+    ) {
+        val reuseOldView = preserveExisting && renderedCollectionKey == key &&
+            showCollectionKey == key && list.childCount > 0
         showCollectionKey = key
+        refreshCurrentSection = { loadCollection(key, name, true, loader) }
         if (!settings.ready) {
             showPlaceholder()
             return
@@ -380,8 +420,12 @@ class MainActivity : Activity() {
         }
         val request = ++nextRequest
         catalogTask?.cancel(true)
-        list.removeAllViews()
-        list.addView(TvUi.label(this, "正在为你准备好看的视频…", 22f))
+        catalogLoading = true
+        refreshIndicator.visibility = if (reuseOldView) View.VISIBLE else View.GONE
+        if (!reuseOldView) {
+            list.removeAllViews()
+            list.addView(TvUi.label(this, "正在为你准备好看的视频…", 22f))
+        }
         catalogTask = catalogExecutor.submit {
             if (Thread.currentThread().isInterrupted) return@submit
             val result = runCatching { loader() }
@@ -393,18 +437,38 @@ class MainActivity : Activity() {
                     updateVpnChrome()
                     return@runOnUiThread
                 }
-                result.onSuccess { renderCollection(name, it) }
-                    .onFailure { error ->
+                catalogLoading = false
+                refreshIndicator.visibility = View.GONE
+                result.onSuccess { videos ->
+                    renderCollection(name, videos, reuseOldView)
+                    if (key == "home") refreshPolicy.onSuccessfulRefresh()
+                }.onFailure { error ->
+                    if (reuseOldView) {
+                        refreshIndicator.text = "⚠ 更新失败，保留当前内容"
+                        refreshIndicator.visibility = View.VISIBLE
+                    } else {
                         list.removeAllViews()
-                        list.addView(TvUi.label(this,
-                            "暂时没有加载成功，请稍后再试。", 23f))
+                        list.addView(TvUi.label(this, "暂时没有加载成功，请稍后再试。", 23f))
                         list.addView(TvUi.label(this, error.message.orEmpty().take(120), 14f))
                     }
+                }
             }
         }
     }
 
-    private fun renderCollection(name: String, videos: List<KidVideo>) {
+    private fun renderCollection(
+        name: String, videos: List<KidVideo>, keepPosition: Boolean = false
+    ) {
+        val signature = videos.joinToString("\u0001") {
+            it.id + "|" + it.title + "|" + it.channelTitle + "|" + it.thumbnailUrl
+        }
+        if (keepPosition && renderedCollectionKey == showCollectionKey &&
+            renderedSignature == signature) return
+        val rememberedFocus = if (keepPosition)
+            (drawerFocus?.transitionName ?: currentFocus?.transitionName) else null
+        val rememberedScroll = if (keepPosition) scrolling.scrollY else 0
+        renderedCollectionKey = showCollectionKey
+        renderedSignature = signature
         list.removeAllViews()
         if (videos.isEmpty()) {
             list.addView(TvUi.label(this, name, 28f, true))
@@ -446,7 +510,19 @@ class MainActivity : Activity() {
             })
         }
         list.addView(grid)
-        scrolling.post { scrolling.scrollTo(0, 0); hero.requestFocus() }
+        scrolling.post {
+            if (keepPosition) {
+                scrolling.scrollTo(0, rememberedScroll.coerceAtMost(
+                    (list.height - scrolling.height).coerceAtLeast(0)))
+                val candidate = if (hero.transitionName == rememberedFocus) hero
+                else (0 until grid.childCount).map { grid.getChildAt(it) }
+                    .firstOrNull { it.transitionName == rememberedFocus }
+                candidate?.requestFocus()
+            } else {
+                scrolling.scrollTo(0, 0)
+                hero.requestFocus()
+            }
+        }
     }
 
     private fun heroShape(focused: Boolean) = GradientDrawable(
