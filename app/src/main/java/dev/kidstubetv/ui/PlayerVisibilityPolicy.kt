@@ -6,6 +6,7 @@ internal object PlayerVisibilityPolicy {
         activityVisible: Boolean,
         videoApproved: Boolean,
         vpnReady: Boolean,
-        vpnReachable: Boolean
-    ): Boolean = activityVisible && videoApproved && vpnReady && vpnReachable
+        vpnReachable: Boolean,
+        withinDailyLimit: Boolean = true
+    ): Boolean = activityVisible && videoApproved && vpnReady && vpnReachable && withinDailyLimit
 }

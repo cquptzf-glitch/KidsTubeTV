@@ -509,7 +509,8 @@ class MainActivity : Activity() {
                 "⚠ VPN 异常 · 正在自动重新连接" else
                 "⚠ VPN 异常 · 按确定重试"
             ProxyStatus.Phase.OFF -> if (settings.proxyReady) {
-                if (VpnManualPause.isPaused) "○ 家长已断开 VPN · 按确定连接"
+                if (consentDeclined) "⚠ VPN 需要家长授权 · 按确定重新授权"
+                else if (VpnManualPause.isPaused) "○ 家长已断开 VPN · 按确定连接"
                 else "⚠ 网络已断开 · 按确定重新连接"
             } else null
             ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)

@@ -1,0 +1,81 @@
+name: KidsTubeTV preview release (official FlClash core)
+on:
+  push:
+    branches:
+      - "publish-preview/v0.3.0-beta.1"
+permissions:
+  contents: write
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: false
+      - name: Install SDK and NDK
+        run: |
+          SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDK_MANAGER" --licenses >/dev/null || true
+          "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+      - name: Build pinned FlClash official Go core
+        run: |
+          bash -n scripts/build-official-flclash-core.sh
+          bash scripts/build-official-flclash-core.sh
+          mkdir -p app/libs
+          cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
+      - name: Lint, unit tests and compile preview APK
+        env:
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.1
+          KIDSTUBE_VERSION_CODE: 3
+        run: |
+          gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
+          mkdir -p dist/release
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.1-FlClash-PREVIEW.apk
+          cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
+          cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
+          ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
+      - name: Prepare preview release notes
+        run: |
+          cat > dist/release/RELEASE_NOTES.md <<'EOF'
+          ## KidsTubeTV v0.3.0-beta.1 (developer preview)
+
+          - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
+          - Embedded official FlClash v0.9.3 core built from pinned upstream source.
+          - Google TV device-code QR flow, parental subscription import and app-only VPN health/recovery UI.
+          - Hardened player callback admission and subscription URL host validation.
+
+          **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.
+          The APK uses a temporary GitHub Actions debug signing key, which is not preserved between runs
+          and generally cannot update an existing build signed with another key. Back up app data first.
+          It has passed CI lint, JVM unit tests and compilation only; TV hardware VPN, Google OAuth,
+          YouTube playback, DNS/IPv6 routing and TV remote interactions are not validated.
+          Configure YouTube Data API access and a legitimate HTTPS Mihomo YAML subscription yourself.
+          EOF
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.3.0-beta.1
+          target_commitish: ${{ github.sha }}
+          name: KidsTubeTV v0.3.0-beta.1 — Android TV preview
+          prerelease: true
+          draft: false
+          generate_release_notes: false
+          body_path: dist/release/RELEASE_NOTES.md
+          files: |
+            dist/release/*.apk
+            dist/release/SHA256SUMS.txt
+            dist/release/FLCLASH-SOURCE-INFO.txt
+            dist/release/FlClash-LICENSE

@@ -11,5 +11,7 @@ class PlayerVisibilityPolicyTest {
         assertFalse(PlayerVisibilityPolicy.canPlay(true, false, true, true))
         assertFalse(PlayerVisibilityPolicy.canPlay(true, true, false, true))
         assertFalse(PlayerVisibilityPolicy.canPlay(true, true, true, false))
+        assertFalse(PlayerVisibilityPolicy.canPlay(true, true, true, true, false))
+        assertTrue(PlayerVisibilityPolicy.canPlay(true, true, true, true, true))
     }
 }

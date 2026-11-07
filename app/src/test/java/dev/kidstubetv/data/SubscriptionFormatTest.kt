@@ -19,6 +19,23 @@ class SubscriptionFormatTest {
         }
     }
 
+    @Test fun rejectsPrivateAndLiteralSubscriptionHosts() {
+        listOf(
+            "https://localhost/subscription",
+            "https://api.local/config",
+            "https://proxy.internal/config",
+            "https://router.home.arpa/config",
+            "https://127.0.0.1/config",
+            "https://192.168.0.1/config",
+            "https://[::1]/config",
+            "https://myrouter/config"
+        ).forEach { address ->
+            assertThrows("Rejected: $address", IllegalArgumentException::class.java) {
+                SubscriptionFormat.normalizeUrl(address)
+            }
+        }
+    }
+
     @Test fun rejectsHtmlAndBase64Subscriptions() {
         assertThrows(IllegalArgumentException::class.java) {
             SubscriptionFormat.validateYaml("<html><body>error</body></html>")

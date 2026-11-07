@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.util.Locale
 
 /** Subscription format validation is intentionally free from Android framework types. */
 object SubscriptionFormat {
@@ -16,7 +17,20 @@ object SubscriptionFormat {
             "仅支持 HTTPS Clash/Mihomo YAML 订阅"
         }
         require(parsed.userInfo == null && parsed.fragment == null) { "订阅地址不能包含账号信息或 #fragment" }
-        require(parsed.host != "localhost" && parsed.host != "127.0.0.1") { "请使用公开 HTTPS 订阅地址" }
+        // Subscription URLs carry secrets and are opened by the TV. Reject
+        // loopback/LAN-style hostnames and literal IPs before every redirect.
+        // This is a host-shape guard, not a DNS rebinding protection.
+        val host = parsed.host!!.lowercase(Locale.ROOT).trimEnd('.')
+        require(host.contains('.') &&
+            host != "localhost" &&
+            !host.endsWith(".localhost") &&
+            !host.endsWith(".local") &&
+            !host.endsWith(".internal") &&
+            !host.endsWith(".home.arpa") &&
+            !host.startsWith("[") &&
+            !host.matches(Regex("""[0-9]+(\\.[0-9]+){3}"""))) {
+            "订阅地址必须使用公开域名（不允许内网主机或 IP 地址）"
+        }
         return value
     }
 

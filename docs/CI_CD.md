@@ -72,3 +72,10 @@ CD 只负责构建和发布，不代表自动完成真实电视的全部功能�
 签名来源仍是仓库 Secrets：`KIDSTUBE_KEYSTORE_BASE64`、`KIDSTUBE_STORE_PASSWORD`、`KIDSTUBE_KEY_ALIAS`、`KIDSTUBE_KEY_PASSWORD`。**不要将密钥或 PIN 提交进仓库。** 由 `v*` 标签触发；缺失签名 Secrets 时直接失败，不发布未签名 APK。
 
 正式 Release 附上官方核心来源版本、FlClash LICENSE 和 APK SHA256 校验文件。默认 Debug 与 Release 可使用不同内核后端，但必须共用自有稳定 Android 签名才能覆盖升级；Actions 临时签名的 Debug APK 不保证能升级至 Release。
+
+
+## 预览版发布（无需用户的生产签名密钥）
+
+推送到 `publish-preview/v0.3.0-beta.1` 分支会触发 `preview-release.yml`。该流水线从固定的 FlClash v0.9.3 源码构建官方 AAR，通过 Lint、JVM 单测及 APK 编译后，创建 `v0.3.0-beta.1` GitHub **Pre-release**，附带 APK、SHA256、核心来源与许可证。
+
+**预览版只使用 Actions 临时 Debug 签名**，不作为稳定版，不保证跨构建覆盖升级，也不替代正式发布流程。待仓库配置生产签名 Secrets 并完成设备端功能验证后，才通过 `v*` 标签触发上文的 `release.yml` 生产签名工作流。

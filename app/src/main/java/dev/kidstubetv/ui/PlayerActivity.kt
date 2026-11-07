@@ -157,7 +157,8 @@ class PlayerActivity : Activity() {
                     visibleToUser,
                     approvedVideoId != null,
                     ProxyStatus.phase == ProxyStatus.Phase.READY,
-                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE
+                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE,
+                    clock.remaining(settings.dailyLimitMinutes) > 0
                 )) {
                     approvedVideoId?.let {
                         youTubePlayer.loadVideo(it, history.resumePosition(it))
@@ -169,9 +170,19 @@ class PlayerActivity : Activity() {
                 youTubePlayer: YouTubePlayer,
                 state: PlayerConstants.PlayerState
             ) {
-                if (!visibleToUser) {
+                // IFrame events can arrive after switching videos, losing VPN or
+                // returning from background. Never account for / auto-advance a
+                // frame that is not currently authorized for playback.
+                if (!PlayerVisibilityPolicy.canPlay(
+                    visibleToUser,
+                    approvedVideoId != null,
+                    ProxyStatus.phase == ProxyStatus.Phase.READY,
+                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE,
+                    clock.remaining(settings.dailyLimitMinutes) > 0
+                )) {
                     if (state == PlayerConstants.PlayerState.PLAYING) youTubePlayer.pause()
                     playing = false
+                    cancelNext()
                     return
                 }
                 playing = state == PlayerConstants.PlayerState.PLAYING
