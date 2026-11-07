@@ -105,3 +105,10 @@
 ### v0.3.0-beta.4 预览版修订
 
 修复首页异步请求期间 VPN 突然断开后 `catalogLoading` 状态可能无法复位，导致随后 VPN 已连接也不加载视频。延续 beta.3 的 SmartTube 风格按需刷新、保留位置、播放器手动重审及 Google/VPN 故障诊断。此版本仍需要 Android TV 真机验收，使用临时 Debug 签名。
+
+
+### v0.3.0-beta.5：SmartTube 架构参考第二轮
+
+新增首页全失败错误识别与自动冷却重试、Google TV OAuth 客户端切换后的令牌失效与回调隔离、播放 iframe 实际视频 ID 绑定及返回前台二次审核，以及多个栏目间的遥控器焦点/滚动恢复。详见 [SmartTube 评估与落地](docs/SMARTTUBE_PORTING_REVIEW.md)。
+
+仍然使用 YouTube Data API + IFrame 与官方 FlClash VPN 核心；本轮没有引入 SmartTube 非官方账号密钥、流解析及 ExoPlayer 服务层。预览版使用 CI 临时 Debug 签名，真实电视上的 VPN/Google 授权/视频播放需独立验证。

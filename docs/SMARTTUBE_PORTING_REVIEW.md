@@ -78,3 +78,16 @@ KidsTubeTV：
 - 视频允许/拒绝/网络断开/播放失败重试/日限时、前后台的边界行为。
 
 当前只以 GitHub CI 明确完成状态为准；没有真实设备结果之前，继续标为开发预览版。
+
+
+## 7. 第二轮 SmartTube 参考改进（v0.3.0-beta.5）
+
+本轮参照 SmartTube BrowsePresenter 的异步刷新、错误状态与焦点记忆，以及独立账户服务、播放器状态事件的设计理念，重新实现以下 Kotlin 模块：
+
+- `data/HomeFeedLoadPolicy.kt`：区分已批准来源**真实为空**、部分请求失败和全部失败。如果 YouTube API、VPN 或账号整体故障，不能伪造“0 条内容”并缓存为成功；部分成功仍能安全显示已过儿童审核的结果。新增 JVM 测试。
+- `ui/MainActivity.kt`：初次加载失败后遵从 `CatalogRefreshPolicy` 5 分钟失败冷却重试，不用反复清屏；错误页提供遥控器可聚焦的主动重试入口，不显示任意网络异常原文，避免意外泄漏凭据。
+- `data/TvOauthClientPolicy.kt`：先校验完整 OAuth Client ID/Secret，再提交更改。Secret 留空则保留当前密钥；更改客户端会清除本地刷新令牌与 access token。旧设备码轮询与过期 refresh 请求不能覆盖新账户状态。
+- `ui/IframeVideoGate.kt`：利用 `android-youtube-player` v13 提供的 `onVideoId`，将没有视频 ID 的播放/秒数事件绑定到本次已审核视频；切换视频、VPN 丢失、Activity 退后台立即失效，回前台再次进行儿童安全审核。新增 JVM 回归测试。
+- `ui/SectionFocusMemory.kt`：按首页/儿歌/动物/故事等栏目记住遥控器焦点所选视频和滚动位置，最多 16 个栏目，仅保存轻量键值，不持有 Android View。家长更改内容白名单时清理焦点记录。
+
+没有复制或启用 SmartTube 的非官方登录凭据、SABR 视频解析器、外部账号 Cookie 或绕过 YouTube 官方播放限制的接口。该版本只完成自动化构建与纯逻辑测试，不具备真实电视 VPN/OAuth/播放验收证据。

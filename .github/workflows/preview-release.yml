@@ -2,7 +2,7 @@ name: KidsTubeTV preview release (official FlClash core)
 on:
   push:
     branches:
-      - "publish-preview/v0.3.0-beta.4"
+      - "publish-preview/v0.3.0-beta.5"
 permissions:
   contents: write
 jobs:
@@ -35,22 +35,22 @@ jobs:
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
       - name: Lint, unit tests and compile preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.4
-          KIDSTUBE_VERSION_CODE: 6
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.5
+          KIDSTUBE_VERSION_CODE: 7
         run: |
           gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
           mkdir -p dist/release
-          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.4-FlClash-PREVIEW.apk
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.5-FlClash-PREVIEW.apk
           cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
           cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
           ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
       - name: Prepare preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## KidsTubeTV v0.3.0-beta.4 (developer preview)
+          ## KidsTubeTV v0.3.0-beta.5 (developer preview)
 
           - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
           - Embedded official FlClash v0.9.3 core built from pinned upstream source.
@@ -66,6 +66,13 @@ jobs:
           - SmartTube-inspired in-place home refresh with focus retention, 30-minute TTL,
             5-minute failure cooldown, image fallback, and manual approved-video retry.
           - Fix an async catalog loading latch that could remain stuck after VPN disruption.
+          - Distinguish complete YouTube API outages from truly empty approved feeds;
+            show a retry control and reattempt automatically after cooldown.
+          - Google TV OAuth client switches invalidate stale local tokens, and late
+            device-code or refresh replies cannot overwrite new client credentials.
+          - Bind iframe playback/history events to actual onVideoId before counting
+            watch time, and revalidate approved media when returning from background.
+          - Keep per-category D-pad focus and scroll across TV browse navigation.
           - Native VPN functionality remains unverified on a physical TV.
 
           **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.
@@ -78,9 +85,9 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.4
+          tag_name: v0.3.0-beta.5
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.4 — Android TV preview
+          name: KidsTubeTV v0.3.0-beta.5 — Android TV preview
           prerelease: true
           draft: false
           generate_release_notes: false

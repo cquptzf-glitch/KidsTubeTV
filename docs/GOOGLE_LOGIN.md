@@ -44,3 +44,11 @@ KidsTubeTV 不包含作者托管的共享 Google OAuth 客户端，不会直接�
 当 Google 的 `generate_204` 检测地址无法访问但 Android VPN 已建立时，允许向真实 OAuth / YouTube API 尝试请求，并根据响应中的安全错误码区分无效客户端、过期设备码、拒绝授权、刷新令牌失效与 YouTube API 配额问题。**没有 VPN 时不进行 Google 直连回退**。
 
 家长中心的网络诊断提供两个不带账号凭据的 HTTPS 可达性检查；这不能代替需要真实 Google OAuth 客户端和手机授权的端到端测试。
+
+
+## beta.5 客户端变更与授权竞态修复
+
+- 修改 Client ID 或填写新 Client Secret 时，先做完整格式检查，再更新加密存储。Secret 输入框为空代表沿用原已存储密钥。
+- **变更客户端会主动清除之前客户端的本地 OAuth access/refresh 令牌**；必须重新扫码授权。这避免旧令牌误用于新客户端造成 `invalid_grant`。
+- 设备码申请记住所属的客户端 ID；后台轮询和刷新访问令牌完成时还要核对客户端 ID/Secret 与取消状态，旧请求不能将过期账号写回。
+- 退出本机 Google 账户时也会取消进行中的授权与二维码弹窗。
