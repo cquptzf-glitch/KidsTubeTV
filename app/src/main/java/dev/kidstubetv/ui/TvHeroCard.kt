@@ -11,6 +11,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import dev.kidstubetv.data.KidVideo
 
 /**
@@ -25,6 +26,7 @@ object TvHeroCard {
             isFocusable = true
             isClickable = true
             tag = "menu-edge"
+            transitionName = "video:${video.id}"
             clipChildren = false
             clipToPadding = false
             background = TvUi.rounded(activity, 0xFF1C3640.toInt(), 22)
@@ -100,7 +102,10 @@ object TvHeroCard {
         if (candidate.startsWith("https://")) {
             Glide.with(activity)
                 .load(candidate)
-                .error(video.thumbnailUrl)
+                .override(activity.resources.displayMetrics.widthPixels,
+                    (activity.resources.displayMetrics.heightPixels * 0.55f).toInt())
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                .error(android.R.drawable.ic_media_report_image)
                 .centerCrop()
                 .into(picture)
         }

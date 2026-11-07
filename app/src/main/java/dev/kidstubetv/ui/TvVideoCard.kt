@@ -8,6 +8,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import dev.kidstubetv.data.KidVideo
 
 /** Large 16:9 artwork, one remote focus target per video, no tiny action buttons. */
@@ -23,6 +24,7 @@ object TvVideoCard {
             isClickable = true
             clipChildren = false
             clipToPadding = false
+            transitionName = "video:${video.id}"
             setPadding(TvUi.dp(activity, 3), TvUi.dp(activity, 3),
                 TvUi.dp(activity, 3), TvUi.dp(activity, 5))
             setOnClickListener { onClick() }
@@ -59,10 +61,20 @@ object TvVideoCard {
             item.scaleY = if (focused) 1.035f else 1f
             item.elevation = if (focused) TvUi.dp(activity, 10).toFloat() else 0f
         }
-        if (video.thumbnailUrl.startsWith("https://")) {
-            Glide.with(activity).load(video.thumbnailUrl)
+        val fallbackUrl = if (video.id.matches(Regex("[A-Za-z0-9_-]{11}")))
+            "https://i.ytimg.com/vi/${video.id}/hqdefault.jpg" else ""
+        if (video.thumbnailUrl.startsWith("https://") || fallbackUrl.isNotBlank()) {
+            val request = Glide.with(activity)
+                .load(video.thumbnailUrl.takeIf { it.startsWith("https://") } ?: fallbackUrl)
+                .override(widthPixels, height)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
                 .placeholder(android.R.drawable.ic_media_play)
-                .centerCrop().into(image)
+            if (fallbackUrl.isNotBlank() && fallbackUrl != video.thumbnailUrl) {
+                request.error(Glide.with(activity).load(fallbackUrl)
+                    .override(widthPixels, height)
+                    .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC))
+            } else request.error(android.R.drawable.ic_media_report_image)
+            request.centerCrop().into(image)
         }
         item.layoutParams = LinearLayout.LayoutParams(widthPixels, -2)
         return item

@@ -57,6 +57,7 @@ class PlayerActivity : Activity() {
     private var autoNext: Runnable? = null
     private var controlsVisible = false
     private var healthPulseSeconds = 0
+    private var needsManualRetry = false
 
     private lateinit var videoView: YouTubePlayerView
     private lateinit var controls: LinearLayout
@@ -216,8 +217,14 @@ class PlayerActivity : Activity() {
             }
 
             override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) {
+                if (!visibleToUser || approvedVideoId == null) return
+                // SmartTube-style explicit recovery, without scraping media
+                // URLs or automatically retrying disallowed content.
+                playing = false
+                needsManualRetry = true
+                pauseButton.text = "重新检查并重试"
                 revealControls()
-                videoTitle.text = "暂时无法播放，请返回选择其他视频（$error）"
+                videoTitle.text = "播放失败（$error）· 按确定重新审核并重试"
             }
         }, IFramePlayerOptions.Builder(this).controls(0).rel(0).ivLoadPolicy(3).build())
 
@@ -289,6 +296,8 @@ class PlayerActivity : Activity() {
         }
         savePlaybackPosition()
         position = newPosition
+        needsManualRetry = false
+        pauseButton.text = "暂停 / 继续"
         approvedVideoId = null
         completedVideoId = null
         positionSeconds = 0f
@@ -352,6 +361,11 @@ class PlayerActivity : Activity() {
     }
 
     private fun togglePlayback() {
+        if (needsManualRetry && ProxyStatus.phase == ProxyStatus.Phase.READY) {
+            // loadAt rechecks madeForKids, embeddability, channel allowlist and time.
+            loadAt(position)
+            return
+        }
         if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             pauseOnVpnLost(); return
         }
