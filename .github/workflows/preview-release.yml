@@ -2,7 +2,7 @@ name: KidsTubeTV preview release (official FlClash core)
 on:
   push:
     branches:
-      - "publish-preview/v0.3.0-beta.5"
+      - "publish-preview/v0.3.0-beta.6"
 permissions:
   contents: write
 jobs:
@@ -35,22 +35,22 @@ jobs:
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
       - name: Lint, unit tests and compile preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.5
-          KIDSTUBE_VERSION_CODE: 7
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.6
+          KIDSTUBE_VERSION_CODE: 8
         run: |
           gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
           mkdir -p dist/release
-          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.5-FlClash-PREVIEW.apk
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.6-FlClash-PREVIEW.apk
           cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
           cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
           ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
       - name: Prepare preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## KidsTubeTV v0.3.0-beta.5 (developer preview)
+          ## KidsTubeTV v0.3.0-beta.6 (developer preview)
 
           - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
           - Embedded official FlClash v0.9.3 core built from pinned upstream source.
@@ -73,6 +73,15 @@ jobs:
           - Bind iframe playback/history events to actual onVideoId before counting
             watch time, and revalidate approved media when returning from background.
           - Keep per-category D-pad focus and scroll across TV browse navigation.
+          - New injectable YouTube Data API transport and approved-home-feed assembler;
+            batch channel metadata and verify candidate videos in bounded pages.
+          - Parent-only authenticated YouTube Data API check distinguishes valid API
+            credentials from HTTPS-only reachability; diagnostic text stays redacted.
+          - Google auth-session epoch invalidates stale device code/refresh results
+            even after logout; TV catalog refreshes when API credentials change.
+          - Google subscription picker ignores out-of-order responses or account
+            changes; refresh rotates approved channel windows for more variety.
+          - Added deterministic fake-network and request-order JVM tests.
           - Native VPN functionality remains unverified on a physical TV.
 
           **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.
@@ -85,9 +94,9 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.5
+          tag_name: v0.3.0-beta.6
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.5 — Android TV preview
+          name: KidsTubeTV v0.3.0-beta.6 — Android TV preview
           prerelease: true
           draft: false
           generate_release_notes: false

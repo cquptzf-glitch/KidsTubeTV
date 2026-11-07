@@ -58,3 +58,15 @@ beta.2 的官方 FlClash Android 适配器将 Wi-Fi DNS 以纯 IP 传入 `Mobile
 5. 如果 YouTube API 返回 `quotaExceeded`、`insufficientPermissions` 等，按照应用给出的 API 错误类别检查，不要不断重启 VPN。
 
 **请保留或备份 TV 上的 Clash 配置；临时 Debug 签名变化可能导致安装包无法直接覆盖升级。** 脱敏报告可用来定位，但不要提交 YAML、订阅 URL、API Key、OAuth token 或 PIN。
+
+## beta.6 真实凭据诊断（家长操作）
+
+新版本“家长中心 → 网络与 VPN → 网络故障诊断”提供 **检查 YouTube API Key / OAuth 凭据（真实接口）**。流程：
+
+1. 确认 VPN 显示 READY，并且已提供有效 API Key 或 Google TV OAuth 登录。
+2. 先使用“检查 Google OAuth / YouTube 真实 HTTPS 地址”判断纯 DNS/TLS/网络问题。
+3. 再使用“检查 YouTube API Key / OAuth 凭据”，它会调用 YouTube Data API v3 `videos.list` 的 `part=id`，请求仅检查接口认证，不会将任何未批准视频加入儿童首页。该请求通常消耗 1 个 API 配额单位。
+4. 若显示 quota、403、401、未启用 Data API v3 等，请检查自己的 Google Cloud 项目；不要盲目重启 VPN。失败或成功的分类结果可复制到脱敏报告中。
+5. 即使此接口成功，也不证明 YouTube IFrame、安卓电视 WebView、节点 IPv6/DNS 或视频嵌入权限均可用。
+
+不要分享 Google Client Secret、API Key、refresh token、Clash YAML 或订阅链接。若多频道首页只出现部分频道，可在菜单“我的频道”访问指定频道；首页会随刷新轮换已批准频道窗口。

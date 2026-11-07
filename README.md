@@ -112,3 +112,11 @@
 新增首页全失败错误识别与自动冷却重试、Google TV OAuth 客户端切换后的令牌失效与回调隔离、播放 iframe 实际视频 ID 绑定及返回前台二次审核，以及多个栏目间的遥控器焦点/滚动恢复。详见 [SmartTube 评估与落地](docs/SMARTTUBE_PORTING_REVIEW.md)。
 
 仍然使用 YouTube Data API + IFrame 与官方 FlClash VPN 核心；本轮没有引入 SmartTube 非官方账号密钥、流解析及 ExoPlayer 服务层。预览版使用 CI 临时 Debug 签名，真实电视上的 VPN/Google 授权/视频播放需独立验证。
+
+### v0.3.0-beta.6：架构、真实 API 检查与批量推荐
+
+参考 SmartTube 服务层设计，`YouTubeRepository` 现在使用独立的 Data API 客户端和可注入 HTTP 通道；首页批量获取已批准频道元数据，再分批重新审核视频，减少重复网络请求与 quota 使用。更多已批准频道会在后续首页刷新中轮换显示，避免长期只看到前五个频道。
+
+Google TV 账号切换和登出会撤销旧设备码/刷新请求结果；家长订阅导入也采用请求版本门控。家长网络诊断页提供**带凭据的真实 YouTube API 检查**，可区分 API 凭据不正确和纯 HTTPS 可以到达两种情况。操作与风险见 [故障排查](docs/DEBUGGING_TV.md) 和 [SmartTube 架构参考](docs/SMARTTUBE_PORTING_REVIEW.md)。
+
+本版仍是带临时 Debug 签名的开发预览：仅静态编译、Lint 和 JVM 单测；Android TV 的真实 VPN、Google OAuth、YouTube IFrame 与儿童遥控器操作并未完成设备验收。

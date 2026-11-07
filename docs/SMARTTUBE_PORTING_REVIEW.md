@@ -91,3 +91,39 @@ KidsTubeTV：
 - `ui/SectionFocusMemory.kt`：按首页/儿歌/动物/故事等栏目记住遥控器焦点所选视频和滚动位置，最多 16 个栏目，仅保存轻量键值，不持有 Android View。家长更改内容白名单时清理焦点记录。
 
 没有复制或启用 SmartTube 的非官方登录凭据、SABR 视频解析器、外部账号 Cookie 或绕过 YouTube 官方播放限制的接口。该版本只完成自动化构建与纯逻辑测试，不具备真实电视 VPN/OAuth/播放验收证据。
+
+## 8. 第三轮 SmartTube 架构优化：可注入接口与可复现回归（beta.6）
+
+对照 SmartTube `MediaServiceCore` 将获取元数据、账户授权与显示视图分开的架构，KidsTubeTV 新增轻量 Kotlin 业务边界（不直接引入其非官方 YouTube API）：
+
+```text
+MainActivity / 卡片刷新
+    → YouTubeRepository
+        → ApprovedHomeFeedService
+            → YouTubeCatalogSource              (fake 可替换)
+            → videos.list 儿童准入重新审核
+        → YouTubeDataApiClient
+            → YouTubeCredential: API Key/OAuth   (不可打印密钥)
+            → GoogleYouTubeHttpTransport         (fake 可替换)
+            → VPN READY 守卫 (凭据刷新前后两次)
+
+家长 Google 授权 / 频道导入
+    → GoogleTvAuth + GoogleAuthSessionEpoch
+    → LatestResultGate (旧账号的请求结果不能覆盖当前 UI)
+
+家长诊断界面
+    → 无凭据 HTTPS 检测
+    → 单次真实 YouTube API 认证检测（耗费约 1 个 Data API quota unit）
+```
+
+**已完成：**
+- `ApprovedHomeFeedService.kt`：5 个批准频道只调用一次 `channels.list`，独立读取上传列表；先集合候选视频 ID，再分批调用 `lookup`，每条依然重新核对 `madeForKids`、`embeddable` 和家长白名单。单个来源异常允许其他来源完成，全批失败不返回虚假空列表。
+- `YouTubeDataApiClient.kt`：仅访问显式允许的 YouTube Data API v3 资源；选 API Key / OAuth Bearer；凭据刷新前后强制检查 VPN 已建立；`YouTubeHttpTransport` 可注入 fake，单元测试真实验证门控与接口分发。
+- `GoogleAuthSessionEpoch.kt`：退出账号、切换客户端和新扫码成功都会使旧轮询/令牌刷新结果失效。家长更换 API Key 后首页的内容签名也改变，不继续缓存旧凭据下的页面。
+- `LatestResultGate.kt`：账号订阅导入的异步结果按序列号确认，退出/销毁/账号切换后不再可弹出旧白名单选择器，保存时也重新检查家长会话和账号版本。
+- `ApprovedChannelRotation.kt`：如果批准超过五个频道，首页每轮刷新选取下一个最多五个频道，不会永久只显示列表前五项；可用“我的频道”直接选择特定频道。
+- 家长“设备与网络诊断”新增带身份凭据的 YouTube Data API 实测，与原有无凭据 Google HTTPS 探测分离，且测试结果不携带 OAuth 令牌、API Key、私人订阅 URL。该检测不请求视频播放、不证明 IFrame 与 VPN DNS/IPv6 的真机正确性。
+
+**测试策略：**JUnit fake transport 验证断网时不刷新令牌、不发 Google 请求；校验视频审核可见性、批量获取、部分失败、全失败；用同步会话版本和异步结果门控覆盖退出登录后旧响应的竞态。所有 TV 页面和原生 TUN 的运行时行为仍须在设备上独立验收。
+
+**暂不引入：**SmartTube 的共享 OAuth 客户端密钥、非公开 Google/YouTube token、SABR/ExoPlayer 流地址解析模块、播放页面直接拉取未审核推荐。这些没有办法以复制单个 Presenter 的方式可靠、合规地嵌入儿童白名单应用。

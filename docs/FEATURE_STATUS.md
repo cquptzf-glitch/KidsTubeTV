@@ -138,3 +138,13 @@
 - 记忆不同栏目当前焦点与滚动距离，切换回栏目恢复 D-pad 视频选择；家长批准内容改变时清理记录。
 - 相关纯逻辑回归新增 `HomeFeedLoadPolicyTest`、`TvOauthClientPolicyTest`、`IframeVideoGateTest`、`SectionFocusMemoryTest`。
 - 以上仅说明源码实现及 CI 静态验收，不代表 Google 正式认证、儿童播放合规或电视真机已经通过。
+
+## 2026-11-07 beta.6：服务层解耦、网络故障可测试、首页频道轮换
+
+- `ApprovedHomeFeedService` 与 `YouTubeCatalogSource`：批量请求频道元数据并把候选视频与儿童视频审核分开，保留网络故障处理。
+- `YouTubeDataApiClient` 与 `YouTubeHttpTransport`：把 API Key、OAuth token、VPN 安全守卫和 HTTP 返回码诊断从 `YouTubeRepository` 中抽离。
+- `GoogleAuthSessionEpoch`：登出/切换 Google TV OAuth/完成新登录后，旧设备码及 refresh 响应不能写回凭据；账号或 API Key 更换触发内容签名失效。
+- `LatestResultGate`：防止 Google 订阅导入异步请求覆盖新账号，保存频道白名单时再次确认当前家长会话和账号版本。
+- 家长诊断新增真实认证的 `videos.list(part=id)` 连接检查，用无效占位视频 ID，不渲染或播放实际儿童视频；错误分为 DNS/TLS/超时/Google API/配额等安全类别。
+- `ApprovedChannelRotation`：已批准频道超过五个时，首页刷新轮换选择的频道窗口，而非只用前五个。
+- 新增服务类和回归单元测试。内核不重新设计；真机 VPN、Google OAuth、IFrame 仍待验收。
