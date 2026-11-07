@@ -47,7 +47,7 @@ object SubscriptionFailurePolicy {
                 "返回内容不是有效的 Clash/Mihomo YAML，请检查链接格式或服务商配置"
             SubscriptionProblem.UNSAFE_PROFILE ->
                 "配置尝试开放局域网管理接口，出于安全原因拒绝导入"
-            SubscriptionProblem.TOO_LARGE -> "配置文件超过 1 MiB，无法安全导入"
+            SubscriptionProblem.TOO_LARGE -> "配置文件超过 4 MiB，无法安全导入"
             SubscriptionProblem.REDIRECT -> "订阅跳转地址无效或跳转次数过多"
             SubscriptionProblem.UNKNOWN -> "订阅响应异常，请检查服务商的 Clash/Mihomo 订阅"
         }
