@@ -54,6 +54,7 @@ class GoogleAccountActivity : Activity() {
     private lateinit var credentialsPane: LinearLayout
     private var cancel: AtomicBoolean? = null
     private var challengeDialog: AlertDialog? = null
+    private val subscriptionRequests = LatestResultGate()
 
     override fun onResume() {
         super.onResume()
@@ -132,6 +133,7 @@ class GoogleAccountActivity : Activity() {
                     cancel?.set(true)
                     challengeDialog?.dismiss()
                     challengeDialog = null
+                    subscriptionRequests.invalidate()
                     auth.logoutLocal()
                     status.text = "已退出本机 Google 账号"
                 }.show()
@@ -147,6 +149,7 @@ class GoogleAccountActivity : Activity() {
             // No in-flight pairing may finish under a different OAuth client.
             cancel?.set(true)
             challengeDialog?.dismiss()
+            subscriptionRequests.invalidate()
             status.text = "✓ Google 客户端已更新，旧授权已清除，请重新扫码"
         } else {
             status.text = "✓ Google 客户端设置已保存，可继续使用原授权"
@@ -245,24 +248,34 @@ class GoogleAccountActivity : Activity() {
             status.text = "请先完成 Google 授权"
             return
         }
+        val request = subscriptionRequests.begin()
+        val authRevision = auth.authRevision
         status.text = "正在读取 Google 账户已订阅频道…"
         Thread({
             val result = runCatching { auth.subscriptions() }
             runOnUiThread {
-                if (isFinishing || isDestroyed || !ParentSession.authorized())
-                    return@runOnUiThread
+                // Account may have changed or parent PIN session may have expired.
+                if (isFinishing || isDestroyed || !ParentSession.authorized() ||
+                    !subscriptionRequests.isCurrent(request) ||
+                    !auth.isLinked || auth.authRevision != authRevision) return@runOnUiThread
                 result.onSuccess { channels ->
                     if (channels.isEmpty()) {
                         status.text = "没有发现订阅频道"
                     } else {
-                        showSubscriptionPicker(channels)
+                        showSubscriptionPicker(channels, request, authRevision)
                     }
-                }.onFailure { status.text = "读取失败：" + (it.message ?: "") }
+                }.onFailure {
+                    status.text = "读取失败：" + (it.message ?: "检查网络或账号")
+                }
             }
         }, "google-subscriptions").start()
     }
 
-    private fun showSubscriptionPicker(channels: List<YoutubeSubscription>) {
+    private fun showSubscriptionPicker(
+        channels: List<YoutubeSubscription>,
+        request: Long,
+        authRevision: Long
+    ) {
         val selected = BooleanArray(channels.size) { channels[it].channelId in settings.allowedChannels }
         AlertDialog.Builder(this)
             .setTitle("选择要批准的频道（未选择的不会加入）")
@@ -271,6 +284,11 @@ class GoogleAccountActivity : Activity() {
             }
             .setNegativeButton("取消", null)
             .setPositiveButton("保存频道白名单") { _, _ ->
+                if (!ParentSession.authorized() || !subscriptionRequests.isCurrent(request) ||
+                    !auth.isLinked || auth.authRevision != authRevision) {
+                    status.text = "Google 账号已改变或家长会话已过期，请重新读取订阅频道"
+                    return@setPositiveButton
+                }
                 val displayed = channels.map { it.channelId }
                 val chosen = channels.filterIndexed { index, _ -> selected[index] }
                     .map { it.channelId }
@@ -288,6 +306,7 @@ class GoogleAccountActivity : Activity() {
 
     override fun onDestroy() {
         cancel?.set(true)
+        subscriptionRequests.invalidate()
         challengeDialog?.dismiss()
         super.onDestroy()
     }
