@@ -803,7 +803,12 @@ class SettingsActivity : Activity() {
                 try {
                     val changed = store.subscriptionUrl != normalized
                     store.subscriptionUrl = normalized
-                    if (changed) store.clearSubscriptionFailure()
+                    if (changed) {
+                        // The timestamp belongs to the old URL. A newly saved
+                        // provider must be eligible for the next auto refresh.
+                        store.subscriptionUpdatedAt = 0L
+                        store.clearProxySelections()
+                    }
                     dialog.dismiss()
                     refreshSummaries()
                     if (shouldDownload) downloadSubscription(normalized, providerChanged = changed)
