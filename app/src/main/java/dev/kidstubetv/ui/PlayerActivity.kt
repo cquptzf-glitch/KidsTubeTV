@@ -40,6 +40,7 @@ class PlayerActivity : Activity() {
     private val history by lazy { WatchHistory(this) }
     private val settings by lazy { SettingsStore(this) }
     private val clock by lazy { WatchTime(this) }
+    private val handheld by lazy { UiDevice.isHandheld(this) }
 
     private var ids = arrayListOf<String>()
     private var position = 0
@@ -68,7 +69,9 @@ class PlayerActivity : Activity() {
     private lateinit var favoriteButton: Button
     private lateinit var pauseButton: Button
 
-    private val hideControls = Runnable { setControlsVisible(false) }
+    private val hideControls = Runnable {
+        if (!handheld) setControlsVisible(false)
+    }
     private val playbackTick = object : Runnable {
         override fun run() {
             healthPulseSeconds++
@@ -101,6 +104,7 @@ class PlayerActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        UiDevice.showSystemBarsForHandheld(this)
         ids = intent.getStringArrayListExtra(EXTRA_VIDEO_IDS) ?: arrayListOf()
         if (ids.isEmpty()) { finish(); return }
         position = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, ids.lastIndex)
@@ -112,24 +116,71 @@ class PlayerActivity : Activity() {
             isFocusable = false
         }
         root.addView(videoView, FrameLayout.LayoutParams(-1, -1))
+        if (handheld) {
+            // IFrame controls are disabled; the whole picture is a large,
+            // reachable touch target for pause/play without tiny WebView UI.
+            root.addView(View(this).apply {
+                isClickable = true
+                contentDescription = "轻触播放画面可暂停或继续"
+                setOnClickListener { togglePlayback(); revealControls() }
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
 
         controls = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (handheld) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(TvUi.dp(this@PlayerActivity, 22), TvUi.dp(this@PlayerActivity, 14),
-                TvUi.dp(this@PlayerActivity, 22), TvUi.dp(this@PlayerActivity, 14))
+            val pad = TvUi.dp(this@PlayerActivity, if (handheld) 8 else 22)
+            setPadding(pad, TvUi.dp(this@PlayerActivity, if (handheld) 8 else 14),
+                pad, TvUi.dp(this@PlayerActivity, if (handheld) 8 else 14))
             setBackgroundColor(0xEA142832.toInt())
         }
-        controls.addView(TvUi.button(this, "上一集") { loadAt(position - 1); revealControls() })
-        pauseButton = TvUi.primaryButton(this, "暂停 / 继续") { togglePlayback(); revealControls() }
-        controls.addView(pauseButton)
-        controls.addView(TvUi.button(this, "下一集") { loadAt(position + 1); revealControls() })
+        val previousButton = TvUi.button(this,
+            if (handheld) "◀ 上一集" else "上一集") {
+            loadAt(position - 1); revealControls()
+        }
+        pauseButton = TvUi.primaryButton(this,
+            if (handheld) "暂停 / 播放" else "暂停 / 继续") {
+            togglePlayback(); revealControls()
+        }
+        val nextButton = TvUi.button(this,
+            if (handheld) "下一集 ▶" else "下一集") {
+            loadAt(position + 1); revealControls()
+        }
         favoriteButton = TvUi.button(this, "☆ 收藏") { toggleFavorite(); revealControls() }
-        controls.addView(favoriteButton)
-        controls.addView(TvUi.button(this, "返回") { finish() })
+        val backButton = TvUi.button(this, "返回") { finish() }
+        if (handheld) {
+            val transportRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            listOf(previousButton, pauseButton, nextButton).forEach { control ->
+                transportRow.addView(control, LinearLayout.LayoutParams(0,
+                    TvUi.dp(this, 52), 1f).apply {
+                        leftMargin = TvUi.dp(this@PlayerActivity, 3)
+                        rightMargin = TvUi.dp(this@PlayerActivity, 3)
+                    })
+            }
+            controls.addView(transportRow, LinearLayout.LayoutParams(-1, -2))
+            val utilityRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            listOf(favoriteButton, backButton).forEach { control ->
+                utilityRow.addView(control, LinearLayout.LayoutParams(0,
+                    TvUi.dp(this, 44), 1f).apply {
+                        leftMargin = TvUi.dp(this@PlayerActivity, 3)
+                        rightMargin = TvUi.dp(this@PlayerActivity, 3)
+                    })
+            }
+            controls.addView(utilityRow, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            listOf(previousButton, pauseButton, nextButton, favoriteButton, backButton)
+                .forEach(controls::addView)
+        }
         root.addView(controls, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
-        videoTitle = TvUi.label(this, "正在检查视频是否适合儿童…", 19f).apply {
+        videoTitle = TvUi.label(this, "正在检查视频是否适合儿童…",
+            if (handheld) 15f else 19f).apply {
             setPadding(TvUi.dp(this@PlayerActivity, 24), TvUi.dp(this@PlayerActivity, 15),
                 TvUi.dp(this@PlayerActivity, 24), TvUi.dp(this@PlayerActivity, 15))
             setBackgroundColor(0xD5142832.toInt())
@@ -453,12 +504,13 @@ class PlayerActivity : Activity() {
     }
 
     private fun setControlsVisible(visible: Boolean) {
-        controlsVisible = visible
+        val shown = handheld || visible
+        controlsVisible = shown
         handler.removeCallbacks(hideControls)
         if (!::controls.isInitialized) return
-        controls.visibility = if (visible) View.VISIBLE else View.GONE
-        videoTitle.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) videoView.requestFocus()
+        controls.visibility = if (shown) View.VISIBLE else View.GONE
+        videoTitle.visibility = if (shown) View.VISIBLE else View.GONE
+        if (!shown) videoView.requestFocus()
     }
 
     private fun revealControls() {
@@ -469,7 +521,8 @@ class PlayerActivity : Activity() {
 
     private fun scheduleAutoHide() {
         handler.removeCallbacks(hideControls)
-        if (playing && controlsVisible) handler.postDelayed(hideControls, 5500)
+        if (!handheld && playing && controlsVisible)
+            handler.postDelayed(hideControls, 5500)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
