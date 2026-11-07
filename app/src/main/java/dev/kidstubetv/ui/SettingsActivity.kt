@@ -468,10 +468,14 @@ class SettingsActivity : Activity() {
             " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
         } else ""
         networkDetail.text = source + time +
-            if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                dev.kidstubetv.proxy.ProxyDnsStatus.underlyingCount == 0)
-                " · 未检测到物理网络 DNS，请查看网络诊断"
-            else ""
+            when {
+                ProxyStatus.phase == ProxyStatus.Phase.ERROR ->
+                    "\n" + ProxyStatus.detail
+                ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                    dev.kidstubetv.proxy.ProxyDnsStatus.underlyingCount == 0 ->
+                    "\n未检测到物理网络 DNS，请打开网络诊断"
+                else -> ""
+            }
         vpnTile.setTitle(when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> "检测 VPN 网络"
             ProxyStatus.Phase.STARTING -> "VPN 正在连接"
