@@ -82,10 +82,7 @@ class MainActivity : Activity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateVpnChrome()
             evaluateVpnRecovery()
-            if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
-                loadDefaultOnce()
-            }
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY) loadDefaultOnce()
         }
     }
 
@@ -130,9 +127,7 @@ class MainActivity : Activity() {
             showPlaceholder()
         }
         updateVpnChrome()
-        if (ProxyStatus.phase == ProxyStatus.Phase.ERROR ||
-            (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)) {
+        if (ProxyStatus.phase == ProxyStatus.Phase.ERROR) {
             evaluateVpnRecovery()
         } else if (settings.proxyReady && !consentPending && !consentDeclined &&
             !VpnManualPause.isPaused &&
@@ -140,10 +135,7 @@ class MainActivity : Activity() {
             !recoveryPolicy.exhausted) {
             requestVpn()
         }
-        if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-            ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
-            loadDefaultOnce()
-        }
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY) loadDefaultOnce()
     }
 
     override fun onStop() {
@@ -227,9 +219,7 @@ class MainActivity : Activity() {
                 recoveryScheduled = false
                 if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
                     ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
-                    KidsVpnService.stop(this@MainActivity)
-                    mainHandler.postDelayed(recoverVpn, 1_200)
-                    recoveryScheduled = true
+                    parentGate()
                 } else requestVpn()
             }
             visibility = View.GONE
@@ -481,9 +471,9 @@ class MainActivity : Activity() {
             recoveryPolicy.onHealthy()
             return
         }
-        val failed = ProxyStatus.phase == ProxyStatus.Phase.ERROR ||
-            (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
+        // A public 204 probe can fail while Google APIs are reachable.
+        // Never tear down a functioning tunnel based on that probe alone.
+        val failed = ProxyStatus.phase == ProxyStatus.Phase.ERROR
         if (!failed) return
         val delay = recoveryPolicy.nextDelay() ?: return
         recoveryScheduled = true
@@ -499,7 +489,7 @@ class MainActivity : Activity() {
         status.text = when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> when (ProxyNetworkHealth.state) {
                 ProxyNetworkHealth.State.ONLINE -> "● 网络可用"
-                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ Google 不可达"
+                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ 网络探测失败"
                 ProxyNetworkHealth.State.UNKNOWN -> "◌ 隧道已启动 · 检测中"
             }
             ProxyStatus.Phase.STARTING -> "◌ 正在连接"
@@ -517,8 +507,7 @@ class MainActivity : Activity() {
                 else "⚠ 网络已断开 · 按确定重新连接"
             } else null
             ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
-                (if (recoveryScheduled) "⚠ Google 不可达 · 自动重连中"
-                    else "⚠ 无法访问 Google · 按确定重新连接") else null
+                "⚠ Google 探测地址失败 · 按确定检查网络（其他接口仍可尝试）" else null
             else -> null
         }
         errorBar.text = error.orEmpty()

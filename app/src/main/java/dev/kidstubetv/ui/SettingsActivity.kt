@@ -340,6 +340,9 @@ class SettingsActivity : Activity() {
         action(panel, "选择代理节点", "一键选择节点；通常可使用订阅默认策略") {
             startActivity(Intent(this, ProxyActivity::class.java))
         }
+        action(panel, "手动重启 VPN", "仅在确实断线或换配置时重启；检测失败不会自动重连") {
+            restartVpnFromParent()
+        }
         action(panel, "网络故障诊断", "查看 DNS、VPN、系统信息和排查提示") {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
@@ -385,12 +388,8 @@ class SettingsActivity : Activity() {
     private fun connectOrTestVpn() {
         when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> {
-                if (ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
-                    networkState.text = "正在检测 Google 网络…"
-                    ProxyNetworkHealth.check(this)
-                } else {
-                    restartVpnFromParent()
-                }
+                networkState.text = "正在检测 Google HTTPS…"
+                ProxyNetworkHealth.check(this)
             }
             ProxyStatus.Phase.STARTING -> networkState.text = "VPN 正在连接，请稍后"
             else -> restartVpnFromParent()
@@ -452,7 +451,7 @@ class SettingsActivity : Activity() {
             ProxyStatus.Phase.ERROR -> "⚠ 连接异常"
             ProxyStatus.Phase.READY -> when (ProxyNetworkHealth.state) {
                 ProxyNetworkHealth.State.ONLINE -> "● Google 网络可用"
-                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ Google 访问失败"
+                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ Google 探测失败（不等于所有 API 不可达）"
                 ProxyNetworkHealth.State.UNKNOWN -> "◌ VPN 已启动，网络检测中"
             }
         }
@@ -474,8 +473,7 @@ class SettingsActivity : Activity() {
                 " · 未检测到物理网络 DNS，请查看网络诊断"
             else ""
         vpnTile.setTitle(when (ProxyStatus.phase) {
-            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
-                "重新连接 VPN" else "检测 VPN 网络"
+            ProxyStatus.Phase.READY -> "检测 VPN 网络"
             ProxyStatus.Phase.STARTING -> "VPN 正在连接"
             else -> "连接 VPN"
         })

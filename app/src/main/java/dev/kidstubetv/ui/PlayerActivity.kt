@@ -72,8 +72,7 @@ class PlayerActivity : Activity() {
             if (healthPulseSeconds % 25 == 1 && ProxyStatus.phase == ProxyStatus.Phase.READY)
                 ProxyNetworkHealth.check(this@PlayerActivity)
             if (playing) {
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
                     pauseOnVpnLost()
                 } else if (clock.addSecond() >= settings.dailyLimitMinutes * 60) {
                     playing = false
@@ -91,7 +90,6 @@ class PlayerActivity : Activity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             renderVpnStatus()
             if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE &&
                 approvedVideoId == null && !admissionPending && ids.isNotEmpty()) {
                 loadAt(position)
             }
@@ -157,7 +155,7 @@ class PlayerActivity : Activity() {
                     visibleToUser,
                     approvedVideoId != null,
                     ProxyStatus.phase == ProxyStatus.Phase.READY,
-                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE,
+                    true, // probe is advisory, real YouTube request may succeed
                     clock.remaining(settings.dailyLimitMinutes) > 0
                 )) {
                     approvedVideoId?.let {
@@ -177,7 +175,7 @@ class PlayerActivity : Activity() {
                     visibleToUser,
                     approvedVideoId != null,
                     ProxyStatus.phase == ProxyStatus.Phase.READY,
-                    ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE,
+                    true, // probe is advisory, real YouTube request may succeed
                     clock.remaining(settings.dailyLimitMinutes) > 0
                 )) {
                     if (state == PlayerConstants.PlayerState.PLAYING) youTubePlayer.pause()
@@ -245,8 +243,7 @@ class PlayerActivity : Activity() {
         // If admission was cancelled by a temporary activity/background
         // transition, retry the same video only when the app VPN is ready.
         if (!admissionPending && approvedVideoId == null &&
-            ids.isNotEmpty() && ProxyStatus.phase == ProxyStatus.Phase.READY &&
-            ProxyNetworkHealth.state != ProxyNetworkHealth.State.UNREACHABLE) {
+            ids.isNotEmpty() && ProxyStatus.phase == ProxyStatus.Phase.READY) {
             loadAt(position)
         }
     }
@@ -286,8 +283,7 @@ class PlayerActivity : Activity() {
             videoTitle.text = "今天的观看时间已经用完啦"
             return
         }
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             pauseOnVpnLost()
             return
         }
@@ -309,8 +305,7 @@ class PlayerActivity : Activity() {
                 if (isFinishing || isDestroyed || !visibleToUser ||
                     request != requestSerial) return@runOnUiThread
                 admissionPending = false
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-                    ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+                if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
                     pauseOnVpnLost()
                     return@runOnUiThread
                 }
@@ -357,8 +352,7 @@ class PlayerActivity : Activity() {
     }
 
     private fun togglePlayback() {
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             pauseOnVpnLost(); return
         }
         if (clock.remaining(settings.dailyLimitMinutes) <= 0) { player?.pause(); return }
@@ -383,13 +377,10 @@ class PlayerActivity : Activity() {
 
     private fun renderVpnStatus() {
         if (!::proxyWarning.isInitialized) return
-        val healthFailed = ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
-        if (ProxyStatus.phase == ProxyStatus.Phase.READY && !healthFailed) {
+        if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
             proxyWarning.visibility = View.GONE
         } else {
-            proxyWarning.text = if (healthFailed)
-                "⚠ VPN 隧道已启动，但 Google 网络无法访问 · 按确定返回检查"
-                else "⚠ VPN 未连接，播放已停止 · 按确定返回首页重新连接"
+            proxyWarning.text = "⚠ VPN 未连接，播放已停止 · 按确定返回首页重新连接"
             proxyWarning.visibility = View.VISIBLE
             playing = false
             player?.pause()
@@ -422,8 +413,7 @@ class PlayerActivity : Activity() {
         val code = event.keyCode
         // The warning is a non-modal banner; OK returns to the launcher even
         // when transport controls previously held D-pad focus.
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE) {
+        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
                 finish()
                 return true
