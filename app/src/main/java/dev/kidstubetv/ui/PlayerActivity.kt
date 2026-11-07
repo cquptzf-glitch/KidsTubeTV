@@ -58,6 +58,8 @@ class PlayerActivity : Activity() {
     private var controlsVisible = false
     private var healthPulseSeconds = 0
     private var needsManualRetry = false
+    private val iframeVideoGate = IframeVideoGate()
+    private var pendingApprovedStart = false
 
     private lateinit var videoView: YouTubePlayerView
     private lateinit var controls: LinearLayout
@@ -160,6 +162,7 @@ class PlayerActivity : Activity() {
                     clock.remaining(settings.dailyLimitMinutes) > 0
                 )) {
                     approvedVideoId?.let {
+                        pendingApprovedStart = true
                         youTubePlayer.loadVideo(it, history.resumePosition(it))
                     }
                 }
@@ -174,7 +177,7 @@ class PlayerActivity : Activity() {
                 // frame that is not currently authorized for playback.
                 if (!PlayerVisibilityPolicy.canPlay(
                     visibleToUser,
-                    approvedVideoId != null,
+                    approvedVideoId != null && iframeVideoGate.isCurrent(),
                     ProxyStatus.phase == ProxyStatus.Phase.READY,
                     true, // probe is advisory, real YouTube request may succeed
                     clock.remaining(settings.dailyLimitMinutes) > 0
@@ -186,6 +189,7 @@ class PlayerActivity : Activity() {
                 }
                 playing = state == PlayerConstants.PlayerState.PLAYING
                 if (playing) {
+                    pendingApprovedStart = false
                     val id = approvedVideoId
                     if (id != null && lastRecordedVideo != id) {
                         history.record(id)
@@ -206,7 +210,30 @@ class PlayerActivity : Activity() {
                 }
             }
 
+            override fun onVideoId(youTubePlayer: YouTubePlayer, videoId: String) {
+                val matched = iframeVideoGate.onVideoId(videoId)
+                val permitted = matched && PlayerVisibilityPolicy.canPlay(
+                    visibleToUser,
+                    approvedVideoId != null,
+                    ProxyStatus.phase == ProxyStatus.Phase.READY,
+                    true,
+                    clock.remaining(settings.dailyLimitMinutes) > 0
+                )
+                if (!permitted) {
+                    youTubePlayer.pause()
+                    playing = false
+                    cancelNext()
+                } else if (pendingApprovedStart) {
+                    // IFrame may report PLAYING before the corresponding video ID.
+                    // Resume only after it identifies the freshly approved media.
+                    pendingApprovedStart = false
+                    youTubePlayer.play()
+                }
+            }
+
             override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
+                if (!iframeVideoGate.isCurrent() || !visibleToUser ||
+                    ProxyStatus.phase != ProxyStatus.Phase.READY) return
                 positionSeconds = second
                 val currentId = approvedVideoId
                 if (visibleToUser && playing && currentId != null &&
@@ -217,7 +244,8 @@ class PlayerActivity : Activity() {
             }
 
             override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) {
-                if (!visibleToUser || approvedVideoId == null) return
+                if (!visibleToUser || approvedVideoId == null ||
+                    iframeVideoGate.hasUnapprovedReportedVideo()) return
                 // SmartTube-style explicit recovery, without scraping media
                 // URLs or automatically retrying disallowed content.
                 playing = false
@@ -263,6 +291,11 @@ class PlayerActivity : Activity() {
         handler.removeCallbacks(hideControls)
         cancelNext()
         savePlaybackPosition()
+        // Admission is single foreground lifetime only: parent whitelist may
+        // change while the TV app is suspended.
+        approvedVideoId = null
+        iframeVideoGate.revoke()
+        pendingApprovedStart = false
         playing = false
         player?.pause()
         unregisterReceiver(vpnReceiver)
@@ -299,6 +332,8 @@ class PlayerActivity : Activity() {
         needsManualRetry = false
         pauseButton.text = "暂停 / 继续"
         approvedVideoId = null
+        iframeVideoGate.revoke()
+        pendingApprovedStart = false
         completedVideoId = null
         positionSeconds = 0f
         lastSavedSecond = 0f
@@ -325,9 +360,13 @@ class PlayerActivity : Activity() {
                     return@runOnUiThread
                 }
                 approvedVideoId = item.id
+                iframeVideoGate.approve(item.id)
                 videoTitle.text = item.title
                 favoriteButton.text = if (history.isFavorite(item.id)) "★ 已收藏" else "☆ 收藏"
-                if (iframeReady) player?.loadVideo(item.id, history.resumePosition(item.id))
+                if (iframeReady) {
+                    pendingApprovedStart = true
+                    player?.loadVideo(item.id, history.resumePosition(item.id))
+                }
             }
         }, "kids-video-admission").start()
     }
@@ -381,6 +420,11 @@ class PlayerActivity : Activity() {
 
     private fun pauseOnVpnLost() {
         savePlaybackPosition()
+        requestSerial++
+        admissionPending = false
+        approvedVideoId = null
+        iframeVideoGate.revoke()
+        pendingApprovedStart = false
         playing = false
         player?.pause()
         cancelNext()
@@ -396,6 +440,12 @@ class PlayerActivity : Activity() {
         } else {
             proxyWarning.text = "⚠ VPN 未连接，播放已停止 · 按确定返回首页重新连接"
             proxyWarning.visibility = View.VISIBLE
+            savePlaybackPosition()
+            requestSerial++
+            admissionPending = false
+            approvedVideoId = null
+            iframeVideoGate.revoke()
+            pendingApprovedStart = false
             playing = false
             player?.pause()
             cancelNext()
