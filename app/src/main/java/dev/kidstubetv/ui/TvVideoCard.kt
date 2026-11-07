@@ -73,7 +73,7 @@ object TvVideoCard {
                 request.error(Glide.with(activity).load(fallbackUrl)
                     .override(widthPixels, height)
                     .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC))
-            } else request.error(android.R.drawable.ic_media_report_image)
+            } else request.error(android.R.drawable.ic_menu_report_image)
             request.centerCrop().into(image)
         }
         item.layoutParams = LinearLayout.LayoutParams(widthPixels, -2)

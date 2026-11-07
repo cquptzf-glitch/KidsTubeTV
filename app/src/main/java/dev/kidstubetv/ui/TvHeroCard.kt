@@ -105,7 +105,7 @@ object TvHeroCard {
                 .override(activity.resources.displayMetrics.widthPixels,
                     (activity.resources.displayMetrics.heightPixels * 0.55f).toInt())
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
-                .error(android.R.drawable.ic_media_report_image)
+                .error(android.R.drawable.ic_menu_report_image)
                 .centerCrop()
                 .into(picture)
         }
