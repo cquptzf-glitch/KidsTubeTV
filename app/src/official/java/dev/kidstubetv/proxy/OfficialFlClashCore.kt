@@ -41,6 +41,12 @@ internal class OfficialFlClashCore : NativeProxyCore {
         )
     }
 
+    override fun updateSystemDns(servers: List<String>) {
+        // FlClash v0.9.3 expects comma-separated system resolvers supplied
+        // by its Android host. Never feed the VPN's own DNS address back here.
+        Mobile.updateDns(servers.joinToString(","))
+    }
+
     override fun stopTun() {
         Mobile.stopTun()
         Mobile.setEventListener(null)

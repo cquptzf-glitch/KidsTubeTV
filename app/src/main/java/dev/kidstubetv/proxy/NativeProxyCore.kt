@@ -18,6 +18,8 @@ internal interface NativeProxyCore {
     /** Return false if the core rejects the TUN descriptor. */
     fun startTun(fd: Int, callbacks: NativeTunCallbacks): Boolean
     fun stopTun()
+    /** Feed underlying Wi-Fi/Ethernet DNS to FlClash's Android "system" resolver. */
+    fun updateSystemDns(servers: List<String>) {}
 }
 
 internal interface ProxyControlBackend {

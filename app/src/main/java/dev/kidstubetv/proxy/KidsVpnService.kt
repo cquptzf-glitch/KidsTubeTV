@@ -59,6 +59,7 @@ class KidsVpnService : VpnService() {
     private var tunStarted = false
     private var tunAttempted = false
     private var failed = false
+    private var dnsMonitor: UnderlyingDnsMonitor? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -96,9 +97,17 @@ class KidsVpnService : VpnService() {
                     main.post {
                         if (!isCurrent(sessionId)) return@post
                         if (!error.isNullOrEmpty()) {
-                            fail("Mihomo configuration failed", sessionId)
+                            fail("代理配置未被 FlClash 内核接受，请检查 YAML 和节点", sessionId)
                         } else {
-                            establishTun(sessionId)
+                            // Official core's "system" DNS has no Android fallback.
+                            // Give it physical network DNS, not our own TUN DNS.
+                            try {
+                                startDnsMonitor(sessionId)
+                                establishTun(sessionId)
+                            } catch (cause: Throwable) {
+                                fail("VPN 网络初始化失败：" +
+                                    (cause.javaClass.simpleName), sessionId)
+                            }
                         }
                     }
                 }
@@ -110,6 +119,13 @@ class KidsVpnService : VpnService() {
 
     private fun isCurrent(sessionId: Long): Boolean =
         sessions.current(sessionId)
+
+    private fun startDnsMonitor(sessionId: Long) {
+        dnsMonitor?.stop()
+        dnsMonitor = UnderlyingDnsMonitor(this, core.tunDns) { servers ->
+            if (isCurrent(sessionId)) core.updateSystemDns(servers)
+        }.also { it.start() }
+    }
 
     private fun establishTun(sessionId: Long) {
         if (!isCurrent(sessionId)) return
@@ -169,6 +185,8 @@ class KidsVpnService : VpnService() {
             stopSelf()
             return
         }
+        dnsMonitor?.stop()
+        dnsMonitor = null
         val cleanup = runCatching {
             if (tunAttempted) core.stopTun()
         }
