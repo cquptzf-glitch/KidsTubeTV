@@ -385,8 +385,8 @@ class MainActivity : Activity() {
     private fun maybeRefreshHome() {
         if (ProxyStatus.phase != ProxyStatus.Phase.READY || !settings.ready ||
             catalogLoading || showCollectionKey != "home" ||
-            renderedCollectionKey != "home" || !refreshPolicy.shouldRefresh()) return
-        loadDefault(force = true, preserveExisting = true)
+            !refreshPolicy.shouldRefresh()) return
+        loadDefault(force = true, preserveExisting = renderedCollectionKey == "home")
     }
 
     private fun loadDefault(force: Boolean = false, preserveExisting: Boolean = false) {
@@ -452,8 +452,12 @@ class MainActivity : Activity() {
                         refreshIndicator.visibility = View.VISIBLE
                     } else {
                         list.removeAllViews()
-                        list.addView(TvUi.label(this, "暂时没有加载成功，请稍后再试。", 23f))
-                        list.addView(TvUi.label(this, error.message.orEmpty().take(120), 14f))
+                        list.addView(TvUi.label(this, "暂时无法读取已批准视频", 23f))
+                        list.addView(TvUi.label(this,
+                            "请检查 VPN、YouTube API 凭据或配额。不会显示未经审核的内容。", 16f))
+                        list.addView(TvUi.primaryButton(this, "↻ 重新加载") {
+                            refreshCurrentSection?.invoke()
+                        })
                     }
                 }
             }
@@ -469,7 +473,8 @@ class MainActivity : Activity() {
         if (keepPosition && renderedCollectionKey == showCollectionKey &&
             renderedSignature == signature) return
         val rememberedFocus = if (keepPosition)
-            (drawerFocus?.transitionName ?: currentFocus?.transitionName) else null
+            (currentFocus?.takeIf { it.isShown }?.transitionName
+                ?: drawerFocus?.transitionName) else null
         val rememberedScroll = if (keepPosition) scrolling.scrollY else 0
         renderedCollectionKey = showCollectionKey
         renderedSignature = signature

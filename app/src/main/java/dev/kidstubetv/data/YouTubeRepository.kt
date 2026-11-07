@@ -103,13 +103,16 @@ class YouTubeRepository(private val settings: SettingsStore) {
      * Round-robin order keeps one prolific channel from dominating the UI.
      */
     fun homeFeed(): List<KidVideo> {
-        val sources = mutableListOf<List<KidVideo>>()
+        val attempts = mutableListOf<Result<List<KidVideo>>>()
         val exact = settings.approvedVideoIds.toList()
-        if (exact.isNotEmpty()) sources.add(lookup(exact.take(40)))
+        if (exact.isNotEmpty()) attempts.add(runCatching { lookup(exact.take(40)) })
         settings.allowedChannels.take(5).forEach { channel ->
-            // A deleted/unavailable channel should not hide other valid channels.
-            runCatching { uploads(channel) }.getOrNull()?.let(sources::add)
+            // One invalid channel must not prevent other approved sources from loading.
+            attempts.add(runCatching { uploads(channel) })
         }
+        // Do not silently turn an API outage into a successful empty catalog.
+        // Success here still means videos.list verified every displayed child item.
+        val sources = HomeFeedLoadPolicy.successfulGroups(attempts)
         return HomeFeedMixer.interleave(sources, { it.id }, 48)
     }
 
