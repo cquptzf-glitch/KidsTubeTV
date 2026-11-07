@@ -137,19 +137,21 @@ class GoogleAccountActivity : Activity() {
     }
 
     private fun saveCredentials(): Boolean = runCatching {
-        val id = clientId.text.toString().trim()
-        require(id.endsWith(".apps.googleusercontent.com")) {
-            "Client ID 格式无效，应为 xxx.apps.googleusercontent.com"
+        val changed = auth.configureClient(
+            clientId.text.toString(), clientSecret.text.toString()
+        )
+        if (changed) {
+            // No in-flight pairing may finish under a different OAuth client.
+            cancel?.set(true)
+            challengeDialog?.dismiss()
+            status.text = "✓ Google 客户端已更新，旧授权已清除，请重新扫码"
+        } else {
+            status.text = "✓ Google 客户端设置已保存，可继续使用原授权"
         }
-        auth.clientId = id
-        val typedSecret = clientSecret.text.toString().trim()
-        if (typedSecret.isNotBlank()) auth.clientSecret = typedSecret
-        require(auth.isConfigured) { "请填入 Google TV OAuth Client Secret" }
     }.fold({
-        status.text = "Google OAuth 客户端配置已保存（Keystore 加密）"
         true
     }, {
-        status.text = "保存失败：" + (it.message ?: "未知错误")
+        status.text = "保存失败：" + (it.message ?: "请检查 Client ID / Secret")
         false
     })
 
@@ -159,6 +161,8 @@ class GoogleAccountActivity : Activity() {
             return
         }
         cancel?.set(true)
+        challengeDialog?.dismiss()
+        challengeDialog = null
         val cancelled = AtomicBoolean(false)
         cancel = cancelled
         status.text = "向 Google 请求电视验证码…"
@@ -166,22 +170,27 @@ class GoogleAccountActivity : Activity() {
             val result = runCatching {
                 val challenge = auth.begin()
                 runOnUiThread {
-                    if (isFinishing || cancelled.get()) return@runOnUiThread
+                    if (isFinishing || cancelled.get() || cancel !== cancelled)
+                        return@runOnUiThread
                     showChallenge(challenge, cancelled)
                 }
                 auth.awaitAuthorization(challenge, cancelled) { progress ->
-                    runOnUiThread { if (!isFinishing) status.text = progress }
+                    runOnUiThread {
+                        if (!isFinishing && cancel === cancelled && !cancelled.get())
+                            status.text = progress
+                    }
                 }
             }
             runOnUiThread {
-                if (!isFinishing) {
-                    result.onFailure { e ->
-                        if (!cancelled.get()) status.text = "Google 登录失败：" + (e.message ?: "")
-                    }.onSuccess {
-                        if (!cancelled.get()) status.text = "Google 授权成功，现在可以导入订阅频道"
-                        challengeDialog?.setOnDismissListener(null)
-                        challengeDialog?.dismiss()
-                    }
+                if (isFinishing || isDestroyed || cancelled.get() || cancel !== cancelled)
+                    return@runOnUiThread
+                result.onFailure { e ->
+                    status.text = "Google 登录失败：" + (e.message ?: "请检查网络与客户端")
+                }.onSuccess {
+                    status.text = "✓ Google 授权成功，现在可以导入订阅频道"
+                    challengeDialog?.setOnDismissListener(null)
+                    challengeDialog?.dismiss()
+                    challengeDialog = null
                 }
             }
         }, "google-tv-oauth").start()

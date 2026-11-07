@@ -24,6 +24,11 @@ data class YoutubeSubscription(val channelId: String, val title: String)
  * Requires developer-owned OAuth client of type "TVs and Limited Input devices".
  */
 class GoogleTvAuth(context: Context) {
+    private companion object {
+        // Multiple SettingsStore/GoogleTvAuth instances share one credentials set.
+        val CREDENTIAL_LOCK = Any()
+    }
+
     private val secret = SecurePrefs(context.applicationContext)
     private val prefs = context.getSharedPreferences("kids_google_tv_oauth", Context.MODE_PRIVATE)
 
@@ -34,6 +39,28 @@ class GoogleTvAuth(context: Context) {
     var clientSecret: String
         get() = secret.get("oauth_client_secret")
         set(v) { secret.put("oauth_client_secret", v.trim()) }
+
+    /**
+     * Atomically validate both client fields before touching saved credentials.
+     * A refresh token issued for one OAuth client must never appear signed-in
+     * after switching to another client's ID or secret.
+     *
+     * @return true when credentials changed and old local tokens were revoked.
+     */
+    fun configureClient(inputId: String, enteredSecret: String): Boolean =
+        synchronized(CREDENTIAL_LOCK) {
+            val update = TvOauthClientPolicy.prepare(
+                clientId, clientSecret, inputId, enteredSecret
+            )
+            if (update.changed) {
+                // Store new configuration first; if secure storage rejects it,
+                // do not report a successful account switch.
+                clientSecret = update.secret
+                clientId = update.id
+                logoutLocal()
+            }
+            update.changed
+        }
 
     val isLinked: Boolean get() = secret.get("oauth_refresh_token").isNotBlank()
     /** Get an OAuth bearer for public YouTube API calls when no API key was configured. */
