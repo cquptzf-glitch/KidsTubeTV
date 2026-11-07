@@ -3,7 +3,6 @@ package dev.kidstubetv.data
 import android.content.Context
 import org.json.JSONObject
 import dev.kidstubetv.proxy.ProxyStatus
-import dev.kidstubetv.proxy.ProxyNetworkHealth
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -47,7 +46,9 @@ class GoogleTvAuth(context: Context) {
             "client_id" to clientId,
             "scope" to "https://www.googleapis.com/auth/youtube.readonly",
         ))
-        require(status in 200..299) { "申请 Google 验证码失败 HTTP $status" }
+        check(status in 200..299) {
+            GoogleOauthErrorPolicy.explain(status, json.optString("error", json.optString("error_code")))
+        }
         val expires = json.getLong("expires_in").coerceIn(1, 3600)
         return TvDeviceCode(
             code = json.getString("device_code"),
@@ -89,7 +90,7 @@ class GoogleTvAuth(context: Context) {
                 "slow_down" -> delaySec = (delaySec + 5).coerceAtMost(60)
                 "access_denied" -> error("Google 授权被取消")
                 "expired_token" -> error("验证码过期，请重新发起授权")
-                else -> error("Google 授权失败：HTTP $status / " + response.optString("error", "未知错误"))
+                else -> error(GoogleOauthErrorPolicy.explain(status, response.optString("error")))
             }
         }
         if (!cancelled.get()) error("Google 验证码已过期")
@@ -103,7 +104,9 @@ class GoogleTvAuth(context: Context) {
             val query = "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=50" +
                 if (token.isBlank()) "" else "&pageToken=" + enc(token)
             val (code, response) = get(query, accessToken())
-            require(code in 200..299) { "YouTube 订阅列表请求失败 HTTP $code" }
+            require(code in 200..299) {
+                YouTubeApiErrorPolicy.explain(code, response.optJSONObject("error"))
+            }
             val list = response.optJSONArray("items")
             if (list != null) for (i in 0 until list.length()) {
                 val detail = list.optJSONObject(i)?.optJSONObject("snippet") ?: continue
@@ -138,8 +141,10 @@ class GoogleTvAuth(context: Context) {
             "refresh_token" to refresh,
             "grant_type" to "refresh_token",
         ))
-        require(code in 200..299 && response.has("access_token")) {
-            "刷新 Google 凭据失败，请重新授权"
+        if (code !in 200..299 || !response.has("access_token")) {
+            val oauthError = response.optString("error")
+            if (oauthError == "invalid_grant") logoutLocal()
+            error(GoogleOauthErrorPolicy.explain(code, oauthError))
         }
         saveAccessToken(response)
         return secret.get("oauth_access_token")
@@ -185,10 +190,8 @@ class GoogleTvAuth(context: Context) {
         } finally { conn.disconnect() }
     }
 
-    private fun requireGoogleVpn() = GoogleRequestPolicy.requireAvailable(
-        ProxyStatus.phase == ProxyStatus.Phase.READY,
-        ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
-    )
+    private fun requireGoogleVpn() =
+        GoogleRequestPolicy.requireAvailable(ProxyStatus.phase == ProxyStatus.Phase.READY)
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 }

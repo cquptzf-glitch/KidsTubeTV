@@ -3,7 +3,6 @@ package dev.kidstubetv.data
 import android.net.Uri
 import org.json.JSONObject
 import dev.kidstubetv.proxy.ProxyStatus
-import dev.kidstubetv.proxy.ProxyNetworkHealth
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -145,10 +144,7 @@ class YouTubeRepository(private val settings: SettingsStore) {
     fun approveSingle(id: String): KidVideo? = lookup(listOf(id)).firstOrNull()
 
     private fun get(endpoint: String, params: Map<String, String>): JSONObject {
-        GoogleRequestPolicy.requireAvailable(
-            ProxyStatus.phase == ProxyStatus.Phase.READY,
-            ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE
-        )
+        GoogleRequestPolicy.requireAvailable(ProxyStatus.phase == ProxyStatus.Phase.READY)
         val key = settings.apiKey
         val token = if (key.isBlank()) settings.oauthAccessToken() else ""
         require(key.isNotBlank() || token.isNotBlank()) {
@@ -164,7 +160,12 @@ class YouTubeRepository(private val settings: SettingsStore) {
         conn.setRequestProperty("Accept", "application/json")
         try {
             val code = conn.responseCode
-            require(code in 200..299) { "YouTube HTTP $code（检查 VPN / 配额 / API Key）" }
+            if (code !in 200..299) {
+                val body = conn.errorStream?.bufferedReader()
+                    ?.use { it.readText().take(16_384) }.orEmpty()
+                val detail = runCatching { JSONObject(body).optJSONObject("error") }.getOrNull()
+                error(YouTubeApiErrorPolicy.explain(code, detail))
+            }
             return JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
         } finally { conn.disconnect() }
     }

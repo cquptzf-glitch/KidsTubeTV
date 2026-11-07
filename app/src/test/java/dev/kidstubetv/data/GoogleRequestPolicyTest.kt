@@ -4,16 +4,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class GoogleRequestPolicyTest {
-    @Test fun allowsVpnWhileHealthUnknownOrOnline() {
-        GoogleRequestPolicy.requireAvailable(vpnReady = true, knownUnreachable = false)
+    @Test fun actualApiCanBeAttemptedWhenVpnIsReadyDespiteProbeFailure() {
+        GoogleRequestPolicy.requireAvailable(vpnReady = true)
     }
-
-    @Test fun blocksBeforeVpnAndAfterUnreachableHealth() {
+    @Test fun neverFallsBackToDirectConnectionWhenVpnIsDown() {
         assertThrows(IllegalStateException::class.java) {
-            GoogleRequestPolicy.requireAvailable(vpnReady = false, knownUnreachable = false)
-        }
-        assertThrows(IllegalStateException::class.java) {
-            GoogleRequestPolicy.requireAvailable(vpnReady = true, knownUnreachable = true)
+            GoogleRequestPolicy.requireAvailable(vpnReady = false)
         }
     }
 }
