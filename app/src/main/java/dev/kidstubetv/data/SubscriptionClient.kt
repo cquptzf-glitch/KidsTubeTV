@@ -41,45 +41,84 @@ object SubscriptionFormat {
     const val MAX_PROFILE_BYTES = 1_048_576
 }
 
-/** HTTPS-only, bounded download; do not log URLs containing subscription tokens. */
-class SubscriptionClient {
+/** HTTPS-only, bounded download; the URL may contain private subscription tokens. */
+class SubscriptionClient(
+    private val openConnection: (URL) -> HttpURLConnection = {
+        it.openConnection() as HttpURLConnection
+    }
+) {
+    /**
+     * Some providers choose YAML vs HTML/Base64 from the User-Agent.
+     * Try only two common Clash client IDs, and retry ONLY on a response
+     * proven to be the wrong format or a UA-related HTTP refusal.
+     */
     fun fetch(input: String): String {
-        var url = SubscriptionFormat.normalizeUrl(input)
+        val normalized = SubscriptionFormat.normalizeUrl(input)
+        val agents = listOf("ClashMetaForAndroid", "clash")
+        for ((index, agent) in agents.withIndex()) {
+            try {
+                return download(normalized, agent)
+            } catch (e: SubscriptionDownloadException) {
+                if (index == agents.lastIndex ||
+                    !SubscriptionResponsePolicy.retryWithClashUserAgent(e)) throw e
+            }
+        }
+        throw SubscriptionDownloadException(SubscriptionProblem.UNKNOWN)
+    }
+
+    private fun download(input: String, agent: String): String {
+        var current = input
         repeat(4) { hop ->
-            val connection = URL(url).openConnection() as HttpURLConnection
+            val connection = openConnection(URL(current))
             connection.instanceFollowRedirects = false
+            connection.useCaches = false
             connection.connectTimeout = 12_000
             connection.readTimeout = 20_000
-            connection.setRequestProperty("Accept", "application/yaml, text/yaml, text/plain, */*")
-            connection.setRequestProperty("User-Agent", "ClashMeta/1.0 KidsTubeTV")
+            connection.setRequestProperty(
+                "Accept", "application/yaml, application/x-yaml, text/yaml, text/plain, */*"
+            )
+            connection.setRequestProperty("User-Agent", agent)
+            connection.setRequestProperty("Accept-Encoding", "gzip")
             try {
                 val code = connection.responseCode
                 if (code in 300..399) {
-                    require(hop < 3) { "订阅重定向次数过多" }
-                    val location = connection.getHeaderField("Location") ?: error("订阅重定向缺少地址")
-                    url = SubscriptionFormat.normalizeUrl(URL(URL(url), location).toExternalForm())
-                } else {
-                    require(code in 200..299) { "订阅服务器返回 HTTP $code" }
-                    val output = ByteArrayOutputStream()
-                    connection.inputStream.use { source ->
-                        val buf = ByteArray(8192)
-                        while (true) {
-                            val n = source.read(buf)
-                            if (n == -1) break
-                            require(output.size() + n <= SubscriptionFormat.MAX_PROFILE_BYTES) {
-                                "订阅配置过大（超过 1 MiB）"
-                            }
-                            output.write(buf, 0, n)
-                        }
+                    if (hop >= 3) throw SubscriptionDownloadException(SubscriptionProblem.REDIRECT)
+                    val location = connection.getHeaderField("Location")
+                        ?: throw SubscriptionDownloadException(SubscriptionProblem.REDIRECT)
+                    current = try {
+                        SubscriptionFormat.normalizeUrl(
+                            URL(URL(current), location).toExternalForm()
+                        )
+                    } catch (_: Exception) {
+                        throw SubscriptionDownloadException(SubscriptionProblem.REDIRECT)
                     }
-                    val text = output.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF")
-                    SubscriptionFormat.validateYaml(text)
-                    return text
+                    return@repeat
                 }
+                if (code !in 200..299) {
+                    throw SubscriptionDownloadException(SubscriptionProblem.HTTP, code)
+                }
+                val output = ByteArrayOutputStream()
+                val encoded = connection.inputStream
+                val stream = if (connection.contentEncoding.equals("gzip", ignoreCase = true))
+                    java.util.zip.GZIPInputStream(encoded) else encoded
+                stream.use { source ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val n = source.read(buffer)
+                        if (n == -1) break
+                        if (output.size() + n > SubscriptionFormat.MAX_PROFILE_BYTES) {
+                            throw SubscriptionDownloadException(SubscriptionProblem.TOO_LARGE)
+                        }
+                        output.write(buffer, 0, n)
+                    }
+                }
+                val yaml = output.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF")
+                SubscriptionResponsePolicy.validate(yaml)
+                return yaml
             } finally {
                 connection.disconnect()
             }
         }
-        error("订阅下载失败")
+        throw SubscriptionDownloadException(SubscriptionProblem.REDIRECT)
     }
 }
