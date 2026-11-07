@@ -28,7 +28,7 @@ object SubscriptionFormat {
             !host.endsWith(".internal") &&
             !host.endsWith(".home.arpa") &&
             !host.startsWith("[") &&
-            !host.matches(Regex("""[0-9]+(\\.[0-9]+){3}"""))) {
+            !host.matches(Regex("""[0-9]+(\.[0-9]+){3}"""))) {
             "订阅地址必须使用公开域名（不允许内网主机或 IP 地址）"
         }
         return value
