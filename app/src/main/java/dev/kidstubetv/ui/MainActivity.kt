@@ -326,10 +326,16 @@ class MainActivity : Activity() {
         list.addView(intro)
         list.addView(TvUi.label(this, "遥控器按 ← 可以打开菜单。", 16f))
         TvUi.space(list, this, 26)
-        if (!settings.proxyReady || !settings.ready) {
-            list.addView(TvUi.label(this,
-                "需要家长先配置代理和儿童频道；设置完成后自动显示视频。", 19f))
-            TvUi.space(list, this, 10)
+        if (!settings.ready) {
+            val pending = mutableListOf<String>()
+            if (!settings.hasPin) pending.add("① 设置家长 PIN")
+            if (!settings.hasProfile) pending.add("② 导入有效 Clash/Mihomo YAML 配置")
+            if (!settings.hasYouTubeAuth) pending.add("③ 配置 YouTube API Key 或 Google TV 授权")
+            if (settings.allowedChannels.isEmpty() && settings.approvedVideoIds.isEmpty())
+                pending.add("④ 添加至少一个家长批准的频道或视频")
+            list.addView(TvUi.label(this, "需要完成以下家长配置：", 20f))
+            pending.forEach { item -> list.addView(TvUi.label(this, item, 19f)) }
+            TvUi.space(list, this, 12)
             list.addView(TvUi.primaryButton(this, "进入家长设置") { parentGate() }.apply {
                 tag = "menu-edge"
             })
