@@ -102,19 +102,11 @@ class YouTubeRepository(private val settings: SettingsStore) {
      * videos. Every candidate still passes videos.list admission checks.
      * Round-robin order keeps one prolific channel from dominating the UI.
      */
-    fun homeFeed(): List<KidVideo> {
-        val attempts = mutableListOf<Result<List<KidVideo>>>()
-        val exact = settings.approvedVideoIds.toList()
-        if (exact.isNotEmpty()) attempts.add(runCatching { lookup(exact.take(40)) })
-        settings.allowedChannels.take(5).forEach { channel ->
-            // One invalid channel must not prevent other approved sources from loading.
-            attempts.add(runCatching { uploads(channel) })
-        }
-        // Do not silently turn an API outage into a successful empty catalog.
-        // Success here still means videos.list verified every displayed child item.
-        val sources = HomeFeedLoadPolicy.successfulGroups(attempts)
-        return HomeFeedMixer.interleave(sources, { it.id }, 48)
-    }
+    fun homeFeed(): List<KidVideo> =
+        ApprovedHomeFeedService(
+            YouTubeCatalogSource { endpoint, params -> get(endpoint, params) },
+            ::lookup
+        ).load(settings.approvedVideoIds.toList(), settings.allowedChannels.toList())
 
     /** 50 IDs per videos.list; avoids the 100-unit search quota for favorites/history. */
     fun lookup(videoIds: List<String>): List<KidVideo> {
