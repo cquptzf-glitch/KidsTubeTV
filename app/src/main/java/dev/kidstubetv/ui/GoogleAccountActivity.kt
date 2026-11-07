@@ -129,6 +129,9 @@ class GoogleAccountActivity : Activity() {
                 .setMessage("只删除本机 Google 登录令牌，Google Cloud 客户端配置会保留。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("退出") { _, _ ->
+                    cancel?.set(true)
+                    challengeDialog?.dismiss()
+                    challengeDialog = null
                     auth.logoutLocal()
                     status.text = "已退出本机 Google 账号"
                 }.show()
@@ -246,7 +249,8 @@ class GoogleAccountActivity : Activity() {
         Thread({
             val result = runCatching { auth.subscriptions() }
             runOnUiThread {
-                if (isFinishing) return@runOnUiThread
+                if (isFinishing || isDestroyed || !ParentSession.authorized())
+                    return@runOnUiThread
                 result.onSuccess { channels ->
                     if (channels.isEmpty()) {
                         status.text = "没有发现订阅频道"

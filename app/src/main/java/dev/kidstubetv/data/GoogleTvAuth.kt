@@ -15,6 +15,7 @@ data class TvDeviceCode(
     val verificationUrl: String,
     val expiresAt: Long,
     val intervalSeconds: Int,
+    val issuedClientId: String,
 )
 data class YoutubeSubscription(val channelId: String, val title: String)
 
@@ -69,8 +70,9 @@ class GoogleTvAuth(context: Context) {
 
     fun begin(): TvDeviceCode {
         require(isConfigured) { "请先设置 Google TV OAuth Client ID 和 Client Secret" }
+        val idAtIssue = clientId
         val (status, json) = post("https://oauth2.googleapis.com/device/code", mapOf(
-            "client_id" to clientId,
+            "client_id" to idAtIssue,
             "scope" to "https://www.googleapis.com/auth/youtube.readonly",
         ))
         check(status in 200..299) {
@@ -83,6 +85,7 @@ class GoogleTvAuth(context: Context) {
             verificationUrl = json.getString("verification_url"),
             expiresAt = System.currentTimeMillis() + expires * 1000L,
             intervalSeconds = json.optInt("interval", 5).coerceIn(5, 60),
+            issuedClientId = idAtIssue,
         )
     }
 
@@ -94,10 +97,11 @@ class GoogleTvAuth(context: Context) {
         var delaySec = challenge.intervalSeconds
         while (!cancelled.get() && System.currentTimeMillis() < challenge.expiresAt) {
             Thread.sleep(delaySec * 1000L)
-            if (cancelled.get()) return
+            if (cancelled.get() || clientId != challenge.issuedClientId) return
+            val secretAtRequest = clientSecret
             val (status, response) = post("https://oauth2.googleapis.com/token", mapOf(
-                "client_id" to clientId,
-                "client_secret" to clientSecret,
+                "client_id" to challenge.issuedClientId,
+                "client_secret" to secretAtRequest,
                 "device_code" to challenge.code,
                 "grant_type" to "urn:ietf:params:oauth:grant-type:device_code",
             ))
@@ -105,10 +109,14 @@ class GoogleTvAuth(context: Context) {
             // never store an OAuth credential after the parent dismissed pairing.
             if (cancelled.get() || System.currentTimeMillis() >= challenge.expiresAt) return
             if (status in 200..299 && response.has("access_token")) {
-                val refresh = response.optString("refresh_token")
-                if (refresh.isNotBlank()) secret.put("oauth_refresh_token", refresh)
-                saveAccessToken(response)
-                check(isLinked) { "Google 未返回 refresh token" }
+                synchronized(CREDENTIAL_LOCK) {
+                    if (cancelled.get() || challenge.issuedClientId != clientId ||
+                        secretAtRequest != clientSecret) return
+                    val refresh = response.optString("refresh_token")
+                    check(refresh.isNotBlank()) { "Google 未返回 refresh token，请重新授权" }
+                    secret.put("oauth_refresh_token", refresh)
+                    saveAccessToken(response)
+                }
                 onProgress("Google 授权成功，可以读取订阅频道")
                 return
             }
@@ -162,19 +170,31 @@ class GoogleTvAuth(context: Context) {
         }
         val refresh = secret.get("oauth_refresh_token")
         check(refresh.isNotBlank()) { "Google 登录已失效，请重新授权" }
+        val idForRefresh = clientId
+        val secretForRefresh = clientSecret
         val (code, response) = post("https://oauth2.googleapis.com/token", mapOf(
-            "client_id" to clientId,
-            "client_secret" to clientSecret,
+            "client_id" to idForRefresh,
+            "client_secret" to secretForRefresh,
             "refresh_token" to refresh,
             "grant_type" to "refresh_token",
         ))
         if (code !in 200..299 || !response.has("access_token")) {
             val oauthError = response.optString("error")
-            if (oauthError == "invalid_grant") logoutLocal()
+            if (oauthError == "invalid_grant") synchronized(CREDENTIAL_LOCK) {
+                if (clientId == idForRefresh &&
+                    secret.get("oauth_refresh_token") == refresh) logoutLocal()
+            }
             error(GoogleOauthErrorPolicy.explain(code, oauthError))
         }
-        saveAccessToken(response)
-        return secret.get("oauth_access_token")
+        return synchronized(CREDENTIAL_LOCK) {
+            check(clientId == idForRefresh &&
+                clientSecret == secretForRefresh &&
+                secret.get("oauth_refresh_token") == refresh) {
+                "Google 客户端在刷新期间发生变化，请重新授权"
+            }
+            saveAccessToken(response)
+            secret.get("oauth_access_token")
+        }
     }
 
     private fun saveAccessToken(data: JSONObject) {
