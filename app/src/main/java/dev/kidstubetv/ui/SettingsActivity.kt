@@ -222,7 +222,7 @@ class SettingsActivity : Activity() {
         }
         scroller.scrollTo(0, 0)
         if (moveFocus) {
-            val targets = mutableListOf<View>()
+            val targets = ArrayList<View>()
             sections[index].addFocusables(targets, View.FOCUS_DOWN)
             targets.firstOrNull()?.let { target ->
                 target.nextFocusLeftId = tabs[index].id
@@ -415,7 +415,15 @@ class SettingsActivity : Activity() {
         if (!ParentSession.authorized() || !store.hasProfile) return
         val request = VpnService.prepare(this)
         if (request == null) KidsVpnService.start(this)
-        else startActivityForResult(request, REQUEST_VPN_PERMISSION)
+        else {
+            ParentSession.allowExternalUi()
+            try {
+                startActivityForResult(request, REQUEST_VPN_PERMISSION)
+            } catch (error: Exception) {
+                ParentSession.endExternalUi()
+                networkDetail.text = "无法打开 Android VPN 授权对话框"
+            }
+        }
     }
 
     private fun buildAccountSection(panel: LinearLayout) {
@@ -782,8 +790,10 @@ class SettingsActivity : Activity() {
     override fun onActivityResult(request: Int, code: Int, data: Intent?) {
         super.onActivityResult(request, code, data)
         if (request == REQUEST_VPN_PERMISSION) {
-            if (code == RESULT_OK && ParentSession.authorized()) KidsVpnService.start(this)
-            else networkDetail.text = "Android VPN 授权被取消；再次选择连接即可重新授权"
+            val permitted = ParentSession.externalUiAuthorized()
+            ParentSession.endExternalUi()
+            if (code == RESULT_OK && permitted) KidsVpnService.start(this)
+            else networkDetail.text = "VPN 授权取消或家长会话已到期，请重新解锁后连接"
             return
         }
         if (request != REQUEST_YAML) return

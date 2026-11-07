@@ -61,6 +61,7 @@ class KidsVpnService : VpnService() {
     private var failed = false
     private var dnsMonitor: UnderlyingDnsMonitor? = null
 
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopNow()
@@ -123,7 +124,10 @@ class KidsVpnService : VpnService() {
     private fun startDnsMonitor(sessionId: Long) {
         dnsMonitor?.stop()
         dnsMonitor = UnderlyingDnsMonitor(this, core.tunDns) { servers ->
-            if (isCurrent(sessionId)) core.updateSystemDns(servers)
+            if (isCurrent(sessionId)) {
+                ProxyDnsStatus.underlyingCount = servers.size
+                core.updateSystemDns(servers)
+            }
         }.also { it.start() }
     }
 
@@ -187,6 +191,7 @@ class KidsVpnService : VpnService() {
         }
         dnsMonitor?.stop()
         dnsMonitor = null
+        ProxyDnsStatus.underlyingCount = 0
         val cleanup = runCatching {
             if (tunAttempted) core.stopTun()
         }

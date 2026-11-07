@@ -27,9 +27,6 @@ internal object SettingsDecor {
         context: Context, title: String, subtitle: String,
         emphasized: Boolean = false, click: () -> Unit
     ): SettingsActionTile = SettingsActionTile(context, title, subtitle, emphasized, click)
-
-    fun action(context: Context, title: String, subtitle: String, click: () -> Unit) =
-        SettingsActionTile(context, title, subtitle, false, click)
 }
 
 internal class SettingsActionTile(

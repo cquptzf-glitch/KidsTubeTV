@@ -19,6 +19,7 @@ import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.proxy.ProxyNetworkHealth
 import dev.kidstubetv.proxy.ProxyStatus
+import dev.kidstubetv.proxy.ProxyDnsStatus
 
 /**
  * Troubleshooting for real Android 9 televisions. No credentials, subscription
@@ -74,7 +75,7 @@ class DiagnosticsActivity : Activity() {
                 message.text = "检测已开始，通常几秒内显示结果…"
                 ProxyNetworkHealth.check(this)
             } else {
-                message.text = "需先从儿童主页连接 VPN，再检查连通性"
+                message.text = "请先在家长中心连接 VPN，再检测连通性"
             }
         })
         panel.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
@@ -124,6 +125,8 @@ class DiagnosticsActivity : Activity() {
         appendLine("Mihomo 配置已导入: " + if (store.hasProfile) "是" else "否")
         appendLine("VPN: " + ProxyStatus.phase.name)
         appendLine("VPN HTTPS 检测: " + ProxyNetworkHealth.state.name)
+        appendLine("底层网络 DNS 数量: " + ProxyDnsStatus.underlyingCount +
+            if (ProxyDnsStatus.underlyingCount == 0) " (VPN 可能无法解析域名)" else "")
         appendLine("Google / YouTube API 已配置: " + if (store.hasYouTubeAuth) "是" else "否")
         appendLine("家长白名单频道数: " + store.allowedChannels.size)
         appendLine("注意: HTTPS 成功不等于 DNS/IPv6 不泄漏；需进一步真机测试。")
