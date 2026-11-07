@@ -497,8 +497,11 @@ class MainActivity : Activity() {
     private fun updateVpnChrome() {
         if (!::status.isInitialized) return
         status.text = when (ProxyStatus.phase) {
-            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
-                "● 网络异常" else "● 网络已连接"
+            ProxyStatus.Phase.READY -> when (ProxyNetworkHealth.state) {
+                ProxyNetworkHealth.State.ONLINE -> "● 网络可用"
+                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ Google 不可达"
+                ProxyNetworkHealth.State.UNKNOWN -> "◌ 隧道已启动 · 检测中"
+            }
             ProxyStatus.Phase.STARTING -> "◌ 正在连接"
             else -> "○ 网络未就绪"
         }
@@ -566,7 +569,7 @@ class MainActivity : Activity() {
     /** First-time setup opens the network tab directly, saving TV remote steps. */
     private fun openParentSettings() {
         startActivity(Intent(this, SettingsActivity::class.java).apply {
-            putExtra(SettingsActivity.EXTRA_SECTION, if (settings.hasProfile) 0 else 1)
+            putExtra(SettingsActivity.EXTRA_SECTION, 1)
         })
     }
 

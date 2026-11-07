@@ -450,8 +450,11 @@ class SettingsActivity : Activity() {
             ProxyStatus.Phase.OFF -> "○ 未连接"
             ProxyStatus.Phase.STARTING -> "◌ 正在连接…"
             ProxyStatus.Phase.ERROR -> "⚠ 连接异常"
-            ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
-                "⚠ 已连接，但网络不可达" else "● 已连接"
+            ProxyStatus.Phase.READY -> when (ProxyNetworkHealth.state) {
+                ProxyNetworkHealth.State.ONLINE -> "● Google 网络可用"
+                ProxyNetworkHealth.State.UNREACHABLE -> "⚠ Google 访问失败"
+                ProxyNetworkHealth.State.UNKNOWN -> "◌ VPN 已启动，网络检测中"
+            }
         }
         networkState.text = state
         networkState.setTextColor(if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
@@ -465,7 +468,11 @@ class SettingsActivity : Activity() {
         val time = if (store.subscriptionUpdatedAt > 0) {
             " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
         } else ""
-        networkDetail.text = source + time
+        networkDetail.text = source + time +
+            if (ProxyStatus.phase == ProxyStatus.Phase.READY &&
+                dev.kidstubetv.proxy.ProxyDnsStatus.underlyingCount == 0)
+                " · 未检测到物理网络 DNS，请查看网络诊断"
+            else ""
         vpnTile.setTitle(when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> if (ProxyNetworkHealth.state == ProxyNetworkHealth.State.UNREACHABLE)
                 "重新连接 VPN" else "检测 VPN 网络"

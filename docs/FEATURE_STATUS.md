@@ -101,3 +101,12 @@
 - 订阅 URL 及每次 HTTPS 重定向禁止本地主机名、常见内网域名、IP 字面量和无点主机名。仍需在实际网络环境评估 DNS 重绑定风险，不将该校验宣传为网络隔离。
 - VPN 权限拒绝后，首页底部异常条使用明确的重新授权文案，保持遥控器确定键重试。
 - 新增官方 FlClash 预览版工作流：没有自持生产签名密钥时只发布 **Debug 签名的 Pre-release**，并在发布说明中声明不得当作稳定版；正式 Release 仍需要固定签名、静态验收及设备级验证。
+
+
+## 2026-11-07 Android TV VPN/DNS 与家长设置改版
+
+- 官方 FlClash v0.9.3 Android 宿主新增 `UnderlyingDnsMonitor`，将非 VPN 的物理网络 DNS 地址同步到 `Mobile.updateDns`，并补充 `android.permission.ACCESS_NETWORK_STATE` 权限。JVM 测试验证 DNS 排重、排除隧道 DNS 和空网络行为。
+- `SettingsActivity` 改为固定左侧导航 + 独立右侧滚动内容，大焦点卡片、网络连接与诊断优先、低频选项折叠；使用遥控器直接连接/重连 VPN，无需退回儿童首页。
+- 家长打开 Android VPN 权限弹窗期间维持有时限的系统授权票据，授权完成或取消后关闭例外，不绕过 PIN。
+- 首页和设置页仅在 HTTPS 探测为 ONLINE 时显示“网络可用”，把隧道启动和真正连通分开；诊断增加无敏感数据的上游 DNS 数量。
+- 以上仍只有静态代码与 CI 检验，**没有电视端 VPN 真机验收**；预览版仅供测试，不宣称生产稳定。
