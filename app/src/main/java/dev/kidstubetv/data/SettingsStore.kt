@@ -74,7 +74,23 @@ class SettingsStore(context: Context) {
 
     var subscriptionUpdatedAt: Long
         get() = prefs.getLong("subscription_updated", 0L)
-        set(v) { prefs.edit().putLong("subscription_updated", v).apply() }
+        set(v) {
+            prefs.edit().putLong("subscription_updated", v)
+                .remove("subscription_update_issue").apply()
+        }
+
+    /** A sanitized failure category only: never persist subscription URLs or tokens. */
+    val subscriptionUpdateIssue: String
+        get() = prefs.getString("subscription_update_issue", "") ?: ""
+
+    fun recordSubscriptionFailure(cause: Throwable, vpnReady: Boolean) {
+        prefs.edit().putString("subscription_update_issue",
+            SubscriptionFailurePolicy.describe(cause, vpnReady).take(200)).apply()
+    }
+
+    fun clearSubscriptionFailure() {
+        prefs.edit().remove("subscription_update_issue").apply()
+    }
 
     val autoRefreshDue: Boolean
         get() = subscriptionUrl.isNotBlank() && subscriptionIntervalHours > 0 &&
