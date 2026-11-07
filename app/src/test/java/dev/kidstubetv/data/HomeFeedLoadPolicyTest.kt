@@ -7,9 +7,9 @@ import org.junit.Test
 class HomeFeedLoadPolicyTest {
     @Test fun emptyValidCatalogIsNotAnError() {
         assertEquals(emptyList<List<String>>(),
-            HomeFeedLoadPolicy.successfulGroups(emptyList()))
+            HomeFeedLoadPolicy.successfulGroups<String>(emptyList()))
         assertEquals(listOf(emptyList<String>()),
-            HomeFeedLoadPolicy.successfulGroups(listOf(Result.success(emptyList()))))
+            HomeFeedLoadPolicy.successfulGroups<String>(listOf(Result.success(emptyList()))))
     }
 
     @Test fun partialSuccessStillShowsApprovedSources() {
