@@ -56,6 +56,7 @@ class MainActivity : Activity() {
     private var catalogTask: Future<*>? = null
     private var loadedAfterConnection = false
     private val refreshPolicy = CatalogRefreshPolicy()
+    private val focusMemory = SectionFocusMemory()
     private var catalogLoading = false
     private var renderedCollectionKey = ""
     private var renderedSignature = ""
@@ -131,6 +132,7 @@ class MainActivity : Activity() {
             lastContentSignature = signature
             loadedAfterConnection = false
             refreshPolicy.invalidate()
+            focusMemory.clear()
             renderedCollectionKey = ""
             renderedSignature = ""
             refreshCurrentSection = null
@@ -396,10 +398,22 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Remember the focused video across category switches like SmartTube. */
+    private fun rememberSectionPosition() {
+        if (renderedCollectionKey != showCollectionKey) return
+        val current = currentFocus?.takeIf { it.isShown && !it.transitionName.isNullOrBlank() }
+        val previous = drawerFocus?.takeIf {
+            it.isAttachedToWindow && !it.transitionName.isNullOrBlank()
+        }
+        val selected = current?.transitionName ?: previous?.transitionName ?: return
+        focusMemory.remember(showCollectionKey, selected, scrolling.scrollY)
+    }
+
     private fun loadCollection(
         key: String, name: String, preserveExisting: Boolean = false,
         loader: () -> List<KidVideo>
     ) {
+        rememberSectionPosition()
         val reuseOldView = preserveExisting && renderedCollectionKey == key &&
             showCollectionKey == key && list.childCount > 0
         showCollectionKey = key
@@ -472,10 +486,11 @@ class MainActivity : Activity() {
         }
         if (keepPosition && renderedCollectionKey == showCollectionKey &&
             renderedSignature == signature) return
+        val location = if (!keepPosition) focusMemory.recall(showCollectionKey) else null
         val rememberedFocus = if (keepPosition)
             (currentFocus?.takeIf { it.isShown }?.transitionName
-                ?: drawerFocus?.transitionName) else null
-        val rememberedScroll = if (keepPosition) scrolling.scrollY else 0
+                ?: drawerFocus?.transitionName) else location?.focusId
+        val rememberedScroll = if (keepPosition) scrolling.scrollY else location?.scrollY ?: 0
         renderedCollectionKey = showCollectionKey
         renderedSignature = signature
         list.removeAllViews()
@@ -520,13 +535,13 @@ class MainActivity : Activity() {
         }
         list.addView(grid)
         scrolling.post {
-            if (keepPosition) {
+            if (keepPosition || location != null) {
                 scrolling.scrollTo(0, rememberedScroll.coerceAtMost(
                     (list.height - scrolling.height).coerceAtLeast(0)))
                 val candidate = if (hero.transitionName == rememberedFocus) hero
                 else (0 until grid.childCount).map { grid.getChildAt(it) }
                     .firstOrNull { it.transitionName == rememberedFocus }
-                candidate?.requestFocus()
+                (candidate ?: hero).requestFocus()
             } else {
                 scrolling.scrollTo(0, 0)
                 hero.requestFocus()
