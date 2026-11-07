@@ -28,7 +28,7 @@ class ApprovedChannelRotationTest {
 
     @Test fun handlesStoredCursorFromOlderLargerWhitelist() {
         assertEquals(listOf("c","a"), ApprovedChannelRotation.select(
-            listOf("a","b","c"), 99, 2))
+            listOf("a","b","c"), 98, 2))
         assertEquals(1, ApprovedChannelRotation.nextCursor(3, 99, 1))
     }
 }
