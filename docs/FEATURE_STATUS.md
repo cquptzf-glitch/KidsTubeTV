@@ -169,3 +169,12 @@
 - HTTP 401/403/404/429/5xx、DNS、TLS、超时、HTML、Base64、超大 YAML、危险管理接口分别输出可操作的脱敏诊断；后台自动订阅更新的失败类别也保留给下次家长查看。
 - 新地址仅保存时，不会删除已生效的旧配置，且不会继承旧链接的更新时间；下载成功后才原子写入新 YAML。重新启用需要家长确认，避免中断已有播放。
 - 纯 JVM fake-connection 测试覆盖 User-Agent 重试、HTTPS 重定向、gzip 解压、响应格式和错误脱敏。
+
+
+## 2026-11-07 beta.9：安装冲突与预览签名 CI
+
+- 旧版 Debug APK 虽然自动签名，但每次 Runner 上的临时 Debug 证书可能不同，同一包名无法覆盖升级。
+- 新版预览支持独立包名 `dev.kidstubetv.preview.b9`，解决与旧版包名的升级冲突；Android 默认 Debug 仍会签名。若 GitHub Secrets 中提供四项独立预览密钥，则改用固定 `dev.kidstubetv.preview` 与私有证书进行可持续升级。
+- 发布时新增 `apksigner` v2 证书验证、APK badging 版本与包名检查、Android 9 最低版本、ARM32/ARM64 原生库校验、ZIP 对齐、SHA256 及公开的证书指纹。
+- 家长设备诊断报告新增真实安装包名和预览渠道类别，便于判断哪份 APK 与当前安装冲突。
+- 尚需实际手机/电视运行 Android 软件安装器确认；此更改不是“任意设备必定能安装”的承诺。

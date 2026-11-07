@@ -1,3 +1,5 @@
+> beta.9 起的预览 APK 与旧版使用不同 app ID，可与旧版并行安装，无需卸载清除旧配置。请先读 [安装和签名排查](INSTALL_AND_SIGNING.md)；ADB 的包名要以 Release 的 `APK_INSTALL_INFO.txt` 为准。
+
 # 构建和雷鸟电视安装
 
 ## 环境

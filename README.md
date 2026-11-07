@@ -1,3 +1,5 @@
+**Android 手机 / TV 安装提示：**旧版 Pre-release 使用临时 Debug 签名，可能因证书不同导致覆盖安装报“应用未安装”。从 beta.9 起发布前必须通过 Android `apksigner` 校验；未配置稳定密钥时采用不与旧版冲突的独立测试包名。先看 [安装与签名故障排查](docs/INSTALL_AND_SIGNING.md) 和 [beta.9 Release](https://github.com/cquptzf-glitch/KidsTubeTV/releases/tag/v0.3.0-beta.9)。
+
 # KidsTubeTV
 
 为 Android TV（最低 **Android 9 / API 28**）开发的遥控器儿童视频应用，内置 Mihomo (Clash Meta) 应用专属 VPN，支持官方 FlClash Go 和旧版 JNI 两套后端。

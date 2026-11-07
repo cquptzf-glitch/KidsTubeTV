@@ -1,3 +1,7 @@
+## beta.9 安装说明
+
+当前下载安装失败优先查 [安装与签名排查](INSTALL_AND_SIGNING.md)。beta.8 与更早的 GitHub Actions Debug 包可能无法相互覆盖；beta.9 默认采用独立 `dev.kidstubetv.preview.b9` 测试包名并在发布流水线检查 APK v2 签名。它与旧版并行安装，旧配置不自动迁移。
+
 # KidsTubeTV · Android 手机安装与功能验证（beta.7）
 
 > 这是**开发预览版验证手册**，不是已执行的手机测试报告。先在 Android 手机复现界面和网络问题，再与 Android TV 对比。最低 Android 9（API 28）。

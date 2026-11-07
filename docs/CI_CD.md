@@ -79,3 +79,10 @@ CD 只负责构建和发布，不代表自动完成真实电视的全部功能�
 推送到 `publish-preview/v0.3.0-beta.1` 分支会触发 `preview-release.yml`。该流水线从固定的 FlClash v0.9.3 源码构建官方 AAR，通过 Lint、JVM 单测及 APK 编译后，创建 `v0.3.0-beta.1` GitHub **Pre-release**，附带 APK、SHA256、核心来源与许可证。
 
 **预览版只使用 Actions 临时 Debug 签名**，不作为稳定版，不保证跨构建覆盖升级，也不替代正式发布流程。待仓库配置生产签名 Secrets 并完成设备端功能验证后，才通过 `v*` 标签触发上文的 `release.yml` 生产签名工作流。
+
+
+## beta.9：严格签名验证与可并行安装预览版
+
+详见 [安装失败与签名排查](INSTALL_AND_SIGNING.md)。新的 `preview-release.yml` 会在发布 APK 前执行 `apksigner verify --min-sdk-version 28 --print-certs`，同时核对签名 v2、manifest 包名、minSdk 28、两个 ARM ABI 和 ZIP 对齐，并附上 `APK_SIGNATURE.txt`、`APK_INSTALL_INFO.txt` 及 SHA256。
+
+在没有专门的预览签名 Secrets 时，测试包使用**带版本号的独立包名**（beta.9 为 `dev.kidstubetv.preview.b9`），由 Android 默认 Debug 密钥签名；它不会覆盖旧 `dev.kidstubetv`，但也不具备后续原位升级保证。配置单独的四项 `KIDSTUBE_PREVIEW_*` GitHub Actions Secrets 后，才使用固定 `dev.kidstubetv.preview` 与私有签名进行后续升级。生产包仍由 `release.yml` 单独管理生产密钥。
