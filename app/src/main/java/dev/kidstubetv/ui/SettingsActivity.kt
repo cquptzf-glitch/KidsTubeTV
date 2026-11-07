@@ -5,6 +5,9 @@ import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ClipboardManager
+import android.content.ClipData
+import android.content.ClipDescription
+import android.os.PersistableBundle
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -34,6 +37,7 @@ import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
 import dev.kidstubetv.data.SubscriptionFormat
 import dev.kidstubetv.data.ClipboardSubscriptionPolicy
+import dev.kidstubetv.data.SubscriptionFailurePolicy
 import dev.kidstubetv.data.WatchHistory
 import dev.kidstubetv.data.WatchTime
 import dev.kidstubetv.proxy.KidsVpnService
@@ -78,6 +82,7 @@ class SettingsActivity : Activity() {
     private lateinit var childSummary: TextView
     private lateinit var accountSummary: TextView
     private lateinit var networkAdvanced: LinearLayout
+    private lateinit var subscriptionRefreshTile: SettingsActionTile
     private val sections = mutableListOf<LinearLayout>()
     private val tabs = mutableListOf<Button>()
     private var selectedSection = 0
@@ -363,8 +368,14 @@ class SettingsActivity : Activity() {
         vpnTile = action(panel, "连接 VPN", "首次连接会出现 Android 系统 VPN 授权", true) {
             connectOrTestVpn()
         }
-        action(panel, "＋ 添加或更换 Clash 订阅", "粘贴手机传来的 HTTPS YAML 链接，无需直接编辑配置") {
+        action(panel, "Clash 订阅地址 · 查看 / 编辑 / 复制",
+            "解锁家长设置后可直接查看完整链接，保存后可立即更新") {
             editSubscription()
+        }
+        subscriptionRefreshTile = action(panel, "↻ 更新已保存的订阅",
+            "一键重新下载 Clash YAML，失败时保留已有配置") {
+            val url = store.subscriptionUrl
+            if (url.isBlank()) editSubscription() else downloadSubscription(url)
         }
         action(panel, "一键检测网络与账号", "诊断 VPN、Google HTTPS 和 YouTube API") {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
@@ -381,10 +392,6 @@ class SettingsActivity : Activity() {
         }
         action(networkAdvanced, "手动重启 VPN", "配置更换后可重新建立隧道") {
             restartVpnFromParent()
-        }
-        action(networkAdvanced, "立即更新订阅", "保留现有配置，更新成功后下次连接生效") {
-            if (store.subscriptionUrl.isBlank()) editSubscription()
-            else downloadSubscription(store.subscriptionUrl)
         }
         action(networkAdvanced, "从 U 盘导入 YAML", "适合电视无法打开订阅链接的情况") { importYaml() }
         action(networkAdvanced, "订阅自动更新周期", "关闭自动更新或设置更新间隔") { chooseRefreshInterval() }
@@ -540,7 +547,9 @@ class SettingsActivity : Activity() {
         val time = if (store.subscriptionUpdatedAt > 0) {
             " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
         } else ""
+        val subscriptionIssue = store.subscriptionUpdateIssue
         networkDetail.text = source + time +
+            (if (subscriptionIssue.isNotBlank()) "\n⚠ 订阅上次失败：" + subscriptionIssue else "") +
             when {
                 ProxyStatus.phase == ProxyStatus.Phase.ERROR ->
                     "\n" + ProxyStatus.detail
@@ -549,6 +558,7 @@ class SettingsActivity : Activity() {
                     "\n未检测到物理网络 DNS，请打开网络诊断"
                 else -> ""
             }
+        subscriptionRefreshTile.visibility = if (store.subscriptionUrl.isBlank()) View.GONE else View.VISIBLE
         vpnTile.setTitle(when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> "检测 VPN 网络"
             ProxyStatus.Phase.STARTING -> "VPN 正在连接"
@@ -709,76 +719,152 @@ class SettingsActivity : Activity() {
             }.show()
     }
 
+    /**
+     * Explicit parent-only URL editor. Do not hide the address as a password:
+     * the parent needs to inspect and copy it when testing on a phone/TV.
+     * Never put the full URL into diagnostics, notifications, or normal status.
+     */
     private fun editSubscription() {
-        // Read clipboard ONLY from a parent-initiated click. Never render a
-        // subscription token on a TV screen shared with children or guests.
-        val clipboardText = runCatching {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.primaryClip?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-        }.getOrDefault("")
-        val candidate = ClipboardSubscriptionPolicy.candidate(clipboardText, store.subscriptionUrl)
-        if (candidate == null) {
-            manuallyEditSubscription()
+        if (!ParentSession.authorized()) {
+            finish()
             return
         }
-        val provider = runCatching { URI(candidate).host }.getOrNull() ?: "订阅服务"
-        AlertDialog.Builder(this)
-            .setTitle("从剪贴板添加 Clash 订阅？")
-            .setMessage("已发现来自 $provider 的 HTTPS 链接。为保护订阅密钥，不会显示完整地址。")
-            .setPositiveButton("使用此订阅") { _, _ -> downloadSubscription(candidate, saveNewUrl = true) }
-            .setNeutralButton("手动输入") { _, _ -> manuallyEditSubscription() }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun manuallyEditSubscription() {
-        editValue(
-            "输入新的 Clash 订阅地址",
-            "",
-            secret = true,
-            hint = "粘贴 HTTPS 订阅链接（不会显示密钥）",
-        ) { input ->
-            val url = SubscriptionFormat.normalizeUrl(input)
-            downloadSubscription(url, saveNewUrl = true)
+        val panel = TvUi.column(this).apply {
+            setPadding(TvUi.dp(this@SettingsActivity, 14),
+                TvUi.dp(this@SettingsActivity, 10),
+                TvUi.dp(this@SettingsActivity, 14),
+                TvUi.dp(this@SettingsActivity, 8))
         }
-    }
-
-    private fun downloadSubscription(url: String, saveNewUrl: Boolean = false) {
-        // Do not stop the active VPN: some providers can only be reached through it.
-        if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
-            networkState.text = "当前正在更新订阅"
-            networkDetail.text = "请稍后重试，避免同时写入代理文件"
-            return
+        val editor = TvUi.input(this, "https://...（Clash / Mihomo YAML）",
+            store.subscriptionUrl).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setSelectAllOnFocus(false)
+            isLongClickable = true
+            contentDescription = "完整 Clash 订阅 URL，可编辑和长按选择复制"
         }
-        networkState.text = "◌ 正在更新订阅…"
-        Thread({
-            val result = runCatching {
-                val yaml = SubscriptionClient().fetch(url)
-                store.writeProfile(yaml)
-                if (saveNewUrl) {
-                    try {
-                        // A new provider's group names may not match old selections.
-                        if (store.subscriptionUrl != url) store.clearProxySelections()
-                        store.subscriptionUrl = url
-                    } catch (error: Exception) {
-                        store.restoreBackup()
-                        throw error
-                    }
-                }
-                store.subscriptionUpdatedAt = System.currentTimeMillis()
+        panel.addView(TvUi.label(this, "完整订阅地址", 17f, true))
+        panel.addView(editor, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(TvUi.label(this,
+            "当前仅家长可查看。链接可能包含访问令牌，复制后请注意系统剪贴板的隐私。", 13f)
+            .apply { setTextColor(TvUi.muted) })
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        panel.addView(row, LinearLayout.LayoutParams(-1, -2))
+        val copy = TvUi.button(this, "复制地址") {
+            val text = editor.text.toString().trim()
+            if (text.isEmpty()) {
+                editor.error = "还没有填写订阅地址"
+                return@button
             }
-            dev.kidstubetv.proxy.SubscriptionUpdateGate.release()
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("KidsTubeTV Clash 订阅", text)
+            if (Build.VERSION.SDK_INT >= 33) {
+                clip.description.extras = PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                }
+            }
+            clipboard.setPrimaryClip(clip)
+            networkDetail.text = "链接已复制到剪贴板，请妥善保管其中的订阅令牌"
+        }
+        row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+        val paste = TvUi.button(this, "粘贴地址") {
+            val value = runCatching {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.primaryClip?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+            }.getOrDefault("")
+            val candidate = ClipboardSubscriptionPolicy.candidate(value, editor.text.toString())
+            if (candidate == null) {
+                editor.error = "剪贴板没有有效的新 HTTPS 订阅地址"
+            } else {
+                editor.setText(candidate)
+                editor.setSelection(editor.text.length)
+            }
+        }
+        row.addView(paste, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("管理 Clash 订阅")
+            .setView(panel)
+            .setNegativeButton("取消", null)
+            .setNeutralButton("仅保存地址", null)
+            .setPositiveButton("保存并更新", null)
+            .create()
+        dialog.setOnShowListener {
+            fun commit(shouldDownload: Boolean) {
+                val normalized = try {
+                    SubscriptionFormat.normalizeUrl(editor.text.toString())
+                } catch (_: Exception) {
+                    editor.error = "请输入完整的公开 HTTPS Clash/Mihomo 订阅地址"
+                    return
+                }
+                try {
+                    val changed = store.subscriptionUrl != normalized
+                    store.subscriptionUrl = normalized
+                    if (changed) store.clearSubscriptionFailure()
+                    dialog.dismiss()
+                    refreshSummaries()
+                    if (shouldDownload) downloadSubscription(normalized, providerChanged = changed)
+                    else {
+                        networkState.text = "✓ 已保存订阅地址"
+                        networkDetail.text = "链接已加密保存，原有 VPN 配置不变；需要时点“更新已保存的订阅”"
+                    }
+                } catch (_: Exception) {
+                    editor.error = "订阅地址保存失败，请检查系统安全存储"
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { commit(false) }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { commit(true) }
+        }
+        dialog.show()
+    }
+
+    private fun downloadSubscription(url: String, providerChanged: Boolean = false) {
+        // Do not stop an active VPN during download; some provider domains are
+        // reachable only through the selected proxy. Apply config next session.
+        if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
+            networkState.text = "◌ 订阅已经在更新"
+            networkDetail.text = "请在当前任务完成后再重试"
+            return
+        }
+        networkState.text = "◌ 正在下载并校验 Clash 订阅…"
+        networkDetail.text = "下载失败不会覆盖原有配置"
+        val vpnReadyAtStart = ProxyStatus.phase == ProxyStatus.Phase.READY
+        Thread({
+            val result = try {
+                runCatching {
+                    val yaml = SubscriptionClient().fetch(url)
+                    check(store.subscriptionUrl == url) { "订阅地址已变更，本次结果已作废" }
+                    store.writeProfile(yaml)
+                    if (providerChanged) store.clearProxySelections()
+                    store.subscriptionUpdatedAt = System.currentTimeMillis()
+                }.onFailure { failure ->
+                    store.recordSubscriptionFailure(failure, vpnReadyAtStart)
+                }
+            } finally {
+                dev.kidstubetv.proxy.SubscriptionUpdateGate.release()
+            }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 refreshSummaries()
                 result.onSuccess {
-                    networkState.text = "✓ 订阅已更新"
-                    networkDetail.text = "下次 VPN 连接时生效；当前播放不受影响"
+                    networkState.text = "✓ 订阅下载并校验成功"
+                    networkDetail.text = "配置已保存，可在下次连接 VPN 时生效"
+                    if (ProxyStatus.phase == ProxyStatus.Phase.READY && ParentSession.authorized()) {
+                        AlertDialog.Builder(this)
+                            .setTitle("应用新 Clash 配置？")
+                            .setMessage("新订阅已下载成功。重新连接 VPN 后会使用新配置。")
+                            .setNegativeButton("稍后", null)
+                            .setPositiveButton("立即应用") { _, _ -> restartVpnFromParent() }
+                            .show()
+                    }
                 }.onFailure {
                     networkState.text = "⚠ 订阅更新失败"
-                    // No provider URL or subscription token in on-screen errors.
-                    networkDetail.text = "旧配置保持不变，请检查订阅链接、网络及 YAML 格式"
+                    networkDetail.text = store.subscriptionUpdateIssue +
+                        if (store.hasProfile) "\n已保留之前可用的配置"
+                        else "\n尚无有效 YAML，可在更多网络设置中导入本地配置"
                 }
             }
         }, "kids-subscription-manual").start()
