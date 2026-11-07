@@ -83,6 +83,7 @@ class SettingsActivity : Activity() {
     private lateinit var accountSummary: TextView
     private lateinit var networkAdvanced: LinearLayout
     private lateinit var subscriptionRefreshTile: SettingsActionTile
+    private lateinit var yamlImportTile: SettingsActionTile
     private val sections = mutableListOf<LinearLayout>()
     private val tabs = mutableListOf<Button>()
     private var selectedSection = 0
@@ -377,6 +378,10 @@ class SettingsActivity : Activity() {
             val url = store.subscriptionUrl
             if (url.isBlank()) editSubscription() else downloadSubscription(url)
         }
+        yamlImportTile = action(panel, "从文件导入 Clash YAML（备用）",
+            "订阅链接访问失败时，选择手机“下载”目录或 U 盘中的 YAML 文件") {
+            importYaml()
+        }
         action(panel, "一键检测网络与账号", "诊断 VPN、Google HTTPS 和 YouTube API") {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
@@ -393,7 +398,6 @@ class SettingsActivity : Activity() {
         action(networkAdvanced, "手动重启 VPN", "配置更换后可重新建立隧道") {
             restartVpnFromParent()
         }
-        action(networkAdvanced, "从 U 盘导入 YAML", "适合电视无法打开订阅链接的情况") { importYaml() }
         action(networkAdvanced, "订阅自动更新周期", "关闭自动更新或设置更新间隔") { chooseRefreshInterval() }
         action(networkAdvanced, "恢复上一次代理配置", "当前连接断开后可恢复本机备份") {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
@@ -558,7 +562,11 @@ class SettingsActivity : Activity() {
                     "\n未检测到物理网络 DNS，请打开网络诊断"
                 else -> ""
             }
-        subscriptionRefreshTile.visibility = if (store.subscriptionUrl.isBlank()) View.GONE else View.VISIBLE
+        subscriptionRefreshTile.visibility =
+            if (store.subscriptionUrl.isBlank()) View.GONE else View.VISIBLE
+        yamlImportTile.visibility =
+            if (!store.hasProfile || store.subscriptionUpdateIssue.isNotBlank())
+                View.VISIBLE else View.GONE
         vpnTile.setTitle(when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> "检测 VPN 网络"
             ProxyStatus.Phase.STARTING -> "VPN 正在连接"
