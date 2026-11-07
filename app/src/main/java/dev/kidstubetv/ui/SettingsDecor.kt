@@ -35,13 +35,13 @@ internal class SettingsActionTile(
 ) : LinearLayout(context) {
     private val titleText = TextView(context).apply {
         text = title
-        textSize = 19f
+        textSize = if (UiDevice.isHandheld(context)) 16f else 19f
         setTextColor(if (emphasized) 0xFF182C31.toInt() else TvUi.text)
         gravity = Gravity.CENTER_VERTICAL
     }
     private val subtitleText = TextView(context).apply {
         text = subtitle
-        textSize = 14f
+        textSize = if (UiDevice.isHandheld(context)) 13f else 14f
         setTextColor(if (emphasized) 0xFF365756.toInt() else TvUi.muted)
         gravity = Gravity.CENTER_VERTICAL
         maxLines = 2
@@ -51,9 +51,10 @@ internal class SettingsActionTile(
         orientation = VERTICAL
         isFocusable = true
         isClickable = true
-        minimumHeight = TvUi.dp(context, 78)
-        setPadding(TvUi.dp(context, 20), TvUi.dp(context, 11),
-            TvUi.dp(context, 20), TvUi.dp(context, 11))
+        minimumHeight = TvUi.dp(context, if (UiDevice.isHandheld(context)) 64 else 78)
+        val pad = if (UiDevice.isHandheld(context)) 13 else 20
+        setPadding(TvUi.dp(context, pad), TvUi.dp(context, 9),
+            TvUi.dp(context, pad), TvUi.dp(context, 9))
         addView(titleText)
         addView(subtitleText)
         background = shape(false)
@@ -65,6 +66,7 @@ internal class SettingsActionTile(
     }
 
     fun setTitle(value: String) { titleText.text = value }
+    fun setSubtitle(value: String) { subtitleText.text = value }
 
     private fun shape(focused: Boolean) = GradientDrawable().apply {
         setColor(if (emphasized) {
