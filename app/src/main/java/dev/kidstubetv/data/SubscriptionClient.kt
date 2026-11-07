@@ -38,7 +38,7 @@ object SubscriptionFormat {
         ClashProfilePolicy.validate(value)
     }
 
-    const val MAX_PROFILE_BYTES = 1_048_576
+    const val MAX_PROFILE_BYTES = 4_194_304
 }
 
 /** HTTPS-only, bounded download; the URL may contain private subscription tokens. */
