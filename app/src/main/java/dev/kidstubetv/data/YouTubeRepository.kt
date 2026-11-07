@@ -105,6 +105,15 @@ class YouTubeRepository(private val settings: SettingsStore) {
             ::lookup
         ).load(settings.approvedVideoIds.toList(), settings.allowedChannels.toList())
 
+    /**
+     * Parent-only authenticated API probe (costs a videos.list quota unit).
+     * Never fetches a real child's video, stores no metadata, and does not
+     * imply a playable IFrame or correct proxy/DNS routing.
+     */
+    fun checkApiCredentials() {
+        get("videos", mapOf("part" to "id", "id" to "00000000000"))
+    }
+
     /** 50 IDs per videos.list; avoids the 100-unit search quota for favorites/history. */
     fun lookup(videoIds: List<String>): List<KidVideo> {
         val validIds = videoIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{11}")) }

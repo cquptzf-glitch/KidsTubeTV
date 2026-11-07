@@ -17,6 +17,8 @@ import android.widget.TextView
 import android.webkit.WebView
 import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
+import dev.kidstubetv.data.YouTubeRepository
+import dev.kidstubetv.data.ApiProbeErrorPolicy
 import dev.kidstubetv.proxy.ProxyNetworkHealth
 import dev.kidstubetv.proxy.ProxyStatus
 import dev.kidstubetv.proxy.ProxyDnsStatus
@@ -45,6 +47,9 @@ class DiagnosticsActivity : Activity() {
     private val store by lazy { SettingsStore(this) }
     private lateinit var report: TextView
     private lateinit var message: TextView
+    private val credentialProbeGate = LatestResultGate()
+    private var credentialProbeInFlight = false
+    private var credentialProbeResult = "未检测"
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) = refresh()
@@ -87,6 +92,35 @@ class DiagnosticsActivity : Activity() {
                 }
             }
         })
+        panel.addView(TvUi.button(this, "检查 YouTube API Key / OAuth 凭据（真实接口）") {
+            if (credentialProbeInFlight) {
+                message.text = "已有一次 API 检查在进行中"
+            } else if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
+                message.text = "VPN 尚未启动，不会直连 Google"
+            } else if (!store.hasYouTubeAuth) {
+                message.text = "尚未配置 YouTube API Key 或 Google TV 登录"
+            } else {
+                val request = credentialProbeGate.begin()
+                credentialProbeInFlight = true
+                message.text = "正在检查 YouTube Data API v3 的真实认证接口…"
+                Thread({
+                    val outcome = runCatching {
+                        YouTubeRepository(store).checkApiCredentials()
+                    }
+                    runOnUiThread {
+                        credentialProbeInFlight = false
+                        if (isFinishing || isDestroyed || !ParentSession.authorized() ||
+                            !credentialProbeGate.isCurrent(request)) return@runOnUiThread
+                        credentialProbeResult = outcome.fold(
+                            { "成功：API 凭据与该接口可用（不代表 IFrame 播放成功）" },
+                            { ApiProbeErrorPolicy.describe(it) }
+                        )
+                        message.text = credentialProbeResult
+                        refresh()
+                    }
+                }, "kids-youtube-credential-probe").start()
+            }
+        })
         panel.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
         panel.addView(TvUi.button(this, "复制不含密钥的诊断报告") {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -112,6 +146,7 @@ class DiagnosticsActivity : Activity() {
     }
 
     override fun onStop() {
+        credentialProbeGate.invalidate()
         unregisterReceiver(receiver)
         super.onStop()
     }
@@ -139,6 +174,7 @@ class DiagnosticsActivity : Activity() {
         appendLine("底层网络 DNS 数量: " + ProxyDnsStatus.underlyingCount +
             if (ProxyDnsStatus.underlyingCount == 0) " (VPN 可能无法解析域名)" else "")
         appendLine("Google / YouTube API 已配置: " + if (store.hasYouTubeAuth) "是" else "否")
+        appendLine("YouTube API 凭据实测: " + credentialProbeResult)
         appendLine("家长白名单频道数: " + store.allowedChannels.size)
         appendLine("注意: HTTPS 成功不等于 DNS/IPv6 不泄漏；需进一步真机测试。")
     }
