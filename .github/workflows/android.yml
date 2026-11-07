@@ -1,4 +1,4 @@
-name: Android TV build
+name: Android TV + phone build
 on:
   push:
     branches: [main]

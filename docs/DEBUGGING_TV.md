@@ -70,3 +70,9 @@ beta.2 的官方 FlClash Android 适配器将 Wi-Fi DNS 以纯 IP 传入 `Mobile
 5. 即使此接口成功，也不证明 YouTube IFrame、安卓电视 WebView、节点 IPv6/DNS 或视频嵌入权限均可用。
 
 不要分享 Google Client Secret、API Key、refresh token、Clash YAML 或订阅链接。若多频道首页只出现部分频道，可在菜单“我的频道”访问指定频道；首页会随刷新轮换已批准频道窗口。
+
+## beta.7 手机测试界面
+
+Android 手机通过通常应用图标打开 KidsTubeTV。首次使用先设置家长 PIN；家长中心的“下一步配置”会依次提示 Clash 订阅、VPN、YouTube 凭据、允许的频道。家长网络页面直接选择“一键检测网络与账号”，默认展示简短结果，“展开详细诊断”才显示原始设备信息与分项检测按钮。
+
+设备码登录时，手机页面显示验证码并可复制；“打开授权网页”调用系统浏览器，跳转网址限制为 Google / YouTube 官方 HTTPS 域名。**外部浏览器不通过 KidsTubeTV 的应用专用 VPN**；如果 Google 网页受网络影响打不开，应另用能正常打开 Google 的设备授权。详见 [手机验证步骤](MOBILE_VALIDATION.md)。

@@ -2,7 +2,7 @@ name: KidsTubeTV preview release (official FlClash core)
 on:
   push:
     branches:
-      - "publish-preview/v0.3.0-beta.6"
+      - "publish-preview/v0.3.0-beta.7"
 permissions:
   contents: write
 jobs:
@@ -35,22 +35,22 @@ jobs:
           cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
       - name: Lint, unit tests and compile preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.6
-          KIDSTUBE_VERSION_CODE: 8
+          KIDSTUBE_VERSION_NAME: 0.3.0-beta.7
+          KIDSTUBE_VERSION_CODE: 9
         run: |
           gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z -1 "$APK" | grep -E '^lib/(armeabi-v7a|arm64-v8a)/'
           mkdir -p dist/release
-          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.6-FlClash-PREVIEW.apk
+          cp "$APK" dist/release/KidsTubeTV-v0.3.0-beta.7-FlClash-PREVIEW.apk
           cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
           cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
           ( cd dist/release && sha256sum *.apk > SHA256SUMS.txt )
       - name: Prepare preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## KidsTubeTV v0.3.0-beta.6 (developer preview)
+          ## KidsTubeTV v0.3.0-beta.7 (TV + Android phone developer preview)
 
           - Immersive remote-friendly kids TV interface, hidden navigation, parental PIN, approved videos/channels.
           - Embedded official FlClash v0.9.3 core built from pinned upstream source.
@@ -82,21 +82,40 @@ jobs:
           - Google subscription picker ignores out-of-order responses or account
             changes; refresh rotates approved channel windows for more variety.
           - Added deterministic fake-network and request-order JVM tests.
-          - Native VPN functionality remains unverified on a physical TV.
+          - Android phones now have portrait/landscape adaptive layout and a
+            regular launcher entry while TV D-pad focus layouts remain supported.
+          - Touch-friendly top menu, scrollable navigation drawer, responsive
+            two-column phone video grid, compact hero and persistent touch
+            playback controls on mobile.
+          - Responsive parent settings switch from TV side rail to swipeable
+            top tabs on phones; a single setup-next-action tile guides the
+            PIN, subscription, VPN, YouTube and whitelist steps.
+          - Rarely used child/network controls are collapsed into advanced
+            sections; API Key and authorized-account options are easier to find.
+          - Google TV device-code activation on phones supports copy code and
+            browser handoff; an allowlist rejects non-Google activation links.
+          - Parent diagnostics show one-tap sequential HTTPS + authenticated
+            API verification, keeping detailed reports collapsed by default.
+          - Added responsive layout and setup-flow unit tests, plus a phone
+            testing checklist in docs/MOBILE_VALIDATION.md.
+          - Native VPN functionality remains unverified on physical TV and phone.
 
-          **IMPORTANT:** This is a test-only, Android 9+ sideload preview, not a stable or production-signed release.
+          **IMPORTANT:** This is a test-only, Android 9+ phone/TV sideload preview, not a stable or production-signed release.
           The APK uses a temporary GitHub Actions debug signing key, which is not preserved between runs
           and generally cannot update an existing build signed with another key. Back up app data first.
-          It has passed CI lint, JVM unit tests and compilation only; TV hardware VPN, Google OAuth,
-          YouTube playback, DNS/IPv6 routing and TV remote interactions are not validated.
-          Configure YouTube Data API access and a legitimate HTTPS Mihomo YAML subscription yourself.
+          It has passed CI lint, JVM unit tests and compilation only; phone/TV hardware VPN,
+          Google OAuth, YouTube playback, DNS/IPv6 routing and remote/touch interaction remain unverified.
+          Android permits one VPN service at a time. Google browser authorization
+          runs outside this app-only VPN, so the phone browser needs its own Google
+          network reachability. Configure a legitimate HTTPS Mihomo YAML subscription
+          and your own YouTube API access. See docs/MOBILE_VALIDATION.md.
           EOF
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.6
+          tag_name: v0.3.0-beta.7
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.6 — Android TV preview
+          name: KidsTubeTV v0.3.0-beta.7 — Android TV + phone preview
           prerelease: true
           draft: false
           generate_release_notes: false

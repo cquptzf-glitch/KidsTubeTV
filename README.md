@@ -120,3 +120,13 @@
 Google TV 账号切换和登出会撤销旧设备码/刷新请求结果；家长订阅导入也采用请求版本门控。家长网络诊断页提供**带凭据的真实 YouTube API 检查**，可区分 API 凭据不正确和纯 HTTPS 可以到达两种情况。操作与风险见 [故障排查](docs/DEBUGGING_TV.md) 和 [SmartTube 架构参考](docs/SMARTTUBE_PORTING_REVIEW.md)。
 
 本版仍是带临时 Debug 签名的开发预览：仅静态编译、Lint 和 JVM 单测；Android TV 的真实 VPN、Google OAuth、YouTube IFrame 与儿童遥控器操作并未完成设备验收。
+
+### v0.3.0-beta.7：Android 手机可用与精简设置
+
+本版新增 Android 手机桌面启动入口和**竖屏/横屏自适应 UI**，电视继续使用 D-pad 导航；手机首页有可触摸菜单、可滚动侧栏、手机视频双列卡片以及两行播放控制。家长设置将三栏电视侧边导航在手机上改为顶部横向分类栏，常用功能减少为一个“下一步配置”引导；网络/儿童管理的高级操作折叠。
+
+手机 Google 设备验证码支持复制与打开官方授权网页，不需要扫描同一块手机屏幕。家长网络诊断增加一个“开始一键检测”，依次检查 VPN、Google HTTPS 与有效的 YouTube Data API 凭据。
+
+**Android 系统限制：** KidsTubeTV 使用应用专用 Android VPN；系统通常不能同时启动另一款 VPN，外部浏览器不通过本应用的 VPN。若手机浏览器不能直接访问 Google，请用另一台能访问的设备完成验证码授权。现阶段仅已通过 CI 静态、编译、JVM 测试，没有真实手机或电视验收报告。
+
+详细操作：[Android 手机安装与功能验证](docs/MOBILE_VALIDATION.md)。
