@@ -443,6 +443,7 @@ class MainActivity : Activity() {
                     renderCollection(name, videos, reuseOldView)
                     if (key == "home") refreshPolicy.onSuccessfulRefresh()
                 }.onFailure { error ->
+                    if (key == "home") refreshPolicy.onFailedRefresh()
                     if (reuseOldView) {
                         refreshIndicator.text = "⚠ 更新失败，保留当前内容"
                         refreshIndicator.visibility = View.VISIBLE
