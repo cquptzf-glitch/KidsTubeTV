@@ -6,7 +6,7 @@ set -euo pipefail
 : "$KIDSTUBE_PREVIEW_FALLBACK_SUFFIX"
 keys=(KIDSTUBE_PREVIEW_KEYSTORE_BASE64 KIDSTUBE_PREVIEW_STORE_PASSWORD KIDSTUBE_PREVIEW_KEY_ALIAS KIDSTUBE_PREVIEW_KEY_PASSWORD)
 count=0
-for name in ""${keys[@]}""; do
+for name in "${keys[@]}"; do
   value="$(printenv "$name" || true)"
   if [[ -n "$value" ]]; then count=$((count + 1)); fi
 done
