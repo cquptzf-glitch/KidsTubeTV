@@ -86,3 +86,12 @@
 - 官方 FlClash 适配器新增 Android 底层 DNS 同步，修复此前缺少 `ACCESS_NETWORK_STATE` 且未调用 `Mobile.updateDns` 的问题；实际节点连接、DNS 路由、YouTube 播放仍需电视验证。
 
 预览版本使用 GitHub Actions 临时 Debug 签名，无法保证覆盖安装之前版本，注意备份应用配置。
+
+## v0.3.0-beta.3 故障修复（预览）
+
+- 修正 beta.2 官方 FlClash 适配层的系统 DNS 参数：原先传裸 IP，现在参照上游 Android NetworkObserver 传 `IPv4:53` / `[IPv6]:53`。
+- VPN 网络检测异常不再阻止 Google OAuth、YouTube API、儿童视频重新审核和播放，也不会仅因单一 gstatic 探测网址失败重启 VPN；实际请求仍强制要求 App VPN 处于 READY。
+- Google 登录将客户端配置放到折叠区，并给出无效客户端、授权过期、YouTube 配额的安全错误提示；页面不会重新显示已保存的 Client Secret。
+- 诊断可以分别检测 Google OAuth 和 YouTube API 的 HTTPS 连通性，并显示脱敏的 VPN 错误类别；儿童首页显示尚未完成的配置步骤。
+
+这是使用临时 GitHub Actions Debug 签名的预览版。真实 Android TV 上的原生 TUN、DNS/IPv6、OAuth 与 IFrame 行为尚需测试，不能以 Lint 与 APK 可编译代替验收。

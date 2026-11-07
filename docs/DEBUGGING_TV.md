@@ -44,3 +44,17 @@ adb logcat -s AndroidRuntime chromium
 以前官方 FlClash 预览版未同步 Android 底层 Wi-Fi/以太网 DNS，也缺少 `ACCESS_NETWORK_STATE` 权限；在 `system` DNS 模式下可能导致隧道虽然启动，但域名请求失败。当前版增加系统网络监听，读取非 VPN 的物理网络 DNS，并调用 `Mobile.updateDns` 同步给 FlClash 内核，停止时移除监听。网络诊断显示“底层网络 DNS 数量”，为 0 时应先检查电视 Wi-Fi/网线、DNS 配置与系统权限。
 
 该修复属于代码层面的推断与检查，**不代表所有 VPN 问题均已修好**。如果新 APK 仍不能联网，建议复制家长诊断报告、描述状态变化与电视系统版本，后续结合真实设备和节点日志分析。
+
+## beta.3 联动故障排查（2026-11-07）
+
+beta.2 的官方 FlClash Android 适配器将 Wi-Fi DNS 以纯 IP 传入 `Mobile.updateDns`，但上游 FlClash `NetworkObserver` 实际使用带端口的 `IPv4:53` / `[IPv6]:53` 字符串。beta.3 已参照上游修正，并添加 JVM 格式测试；同时单个 `generate_204` 检测失败不再直接阻止真实 Google API、OAuth 和播放请求，也不会自动重启 VPN。
+
+在家长中心 → 网络与 VPN → 网络故障诊断，先确认以下信息：
+
+1. VPN 是 OFF、STARTING、READY 还是 ERROR；若 ERROR，查看带 `VPN_` 前缀的失败类别。
+2. 底层网络 DNS 数量是否大于 0。为 0 时检查电视物理 Wi-Fi/以太网、网关 DNS。
+3. 点击“检查 Google OAuth / YouTube 真实 HTTPS 地址”。这是**不带凭据的网络层检测**，收到 HTTP 400/401/403/405 也可以表示 HTTPS/TLS 已到达服务端，不能据此判定 OAuth/API 认证成功。
+4. 如果 Google HTTPS 到达、OAuth 仍报 `invalid_client`，检查 Google Cloud 项目是否启用 YouTube Data API v3、客户端类型是否为 TV、Client ID/Secret 是否来自同一客户端。
+5. 如果 YouTube API 返回 `quotaExceeded`、`insufficientPermissions` 等，按照应用给出的 API 错误类别检查，不要不断重启 VPN。
+
+**请保留或备份 TV 上的 Clash 配置；临时 Debug 签名变化可能导致安装包无法直接覆盖升级。** 脱敏报告可用来定位，但不要提交 YAML、订阅 URL、API Key、OAuth token 或 PIN。

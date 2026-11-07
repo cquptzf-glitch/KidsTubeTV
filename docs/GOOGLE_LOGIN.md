@@ -34,3 +34,13 @@ Google 官方 TV OAuth 文档：<https://developers.google.com/identity/protocol
 家长进入 Google 账号授权界面，电视显示 Google 官方设备验证 URL 的 QR 码及短验证码。用手机扫码打开 URL，**在手机上输入电视验证码**，再授权 YouTube 订阅的只读访问。二维码不包含 Google 访问令牌、刷新令牌、Clash 订阅密码或家长 PIN。
 
 取消授权或设备码过期后，后台返回的 OAuth 令牌不会写入本机。登录仍需用户自行提供 Google Cloud TV/limited-input OAuth 客户端凭据，尚不提供应用作者托管的 OAuth 服务。
+
+## beta.3 Google 登录故障分类
+
+KidsTubeTV 不包含作者托管的共享 Google OAuth 客户端，不会直接读取系统 YouTube App 的登录信息。首次使用仍需自行创建 Google Cloud **TVs and Limited Input devices** 客户端，并启用 **YouTube Data API v3**。
+
+新版本默认突出“手机扫码授权”，客户端设置按需展开。已保存的 Client Secret 不再预填到电视编辑框：编辑框留空即保留旧密钥。
+
+当 Google 的 `generate_204` 检测地址无法访问但 Android VPN 已建立时，允许向真实 OAuth / YouTube API 尝试请求，并根据响应中的安全错误码区分无效客户端、过期设备码、拒绝授权、刷新令牌失效与 YouTube API 配额问题。**没有 VPN 时不进行 Google 直连回退**。
+
+家长中心的网络诊断提供两个不带账号凭据的 HTTPS 可达性检查；这不能代替需要真实 Google OAuth 客户端和手机授权的端到端测试。

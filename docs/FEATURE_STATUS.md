@@ -110,3 +110,11 @@
 - 家长打开 Android VPN 权限弹窗期间维持有时限的系统授权票据，授权完成或取消后关闭例外，不绕过 PIN。
 - 首页和设置页仅在 HTTPS 探测为 ONLINE 时显示“网络可用”，把隧道启动和真正连通分开；诊断增加无敏感数据的上游 DNS 数量。
 - 以上仍只有静态代码与 CI 检验，**没有电视端 VPN 真机验收**；预览版仅供测试，不宣称生产稳定。
+
+## 2026-11-07 beta.3 实际故障回归
+
+- 修复单个 gstatic `generate_204` 探测失败会拒绝真实 OAuth / YouTube API、阻止视频页面加载并触发无意义的 VPN 自动重启的联动问题。单测保证 VPN 未建立时依然不能直连 Google。
+- 根据 FlClash v0.9.3 上游 Android `NetworkObserver` 接口，官方内核 `Mobile.updateDns` 的 DNS 上游必须传 `IPv4:53` / `[IPv6]:53`，不再传裸 IP；增加格式回归测试。
+- Google TV OAuth 页面将扫码与订阅导入前置、客户端配置按需展开，不在电视输入框重显旧 Secret；新增安全的 OAuth 失败类别和 YouTube API 错误翻译。
+- 直接显示脱敏 VPN 初始化阶段原因；新增无凭据 Google OAuth/YouTube HTTPS 两站点探测；首页显示缺少的代理、Google API 或白名单步骤。
+- 静态验证与 Release 仅表示可编译和纯逻辑测试通过，**不宣称**电视上的 VPN、Google 授权或 YouTube IFrame 已正常工作。需要进一步收集真机脱敏诊断。
