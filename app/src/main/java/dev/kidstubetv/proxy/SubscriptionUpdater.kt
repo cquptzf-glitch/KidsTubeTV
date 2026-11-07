@@ -33,8 +33,11 @@ object SubscriptionUpdater {
                 // Core already parsed config.yaml. New profile loads next session.
                 current.writeProfile(yaml)
                 current.subscriptionUpdatedAt = System.currentTimeMillis()
-            } catch (_: Exception) {
-                // Keep previous good YAML; never expose URL/tokens in logs or TV UI.
+            } catch (failure: Exception) {
+                // Store only a sanitized category; the URL may contain a token.
+                SettingsStore(app).recordSubscriptionFailure(
+                    failure, ProxyStatus.phase == ProxyStatus.Phase.READY
+                )
             } finally {
                 busy.release()
             }
