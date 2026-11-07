@@ -2,6 +2,11 @@ package dev.kidstubetv.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.text.InputType
@@ -54,15 +59,21 @@ class GoogleAccountActivity : Activity() {
     private lateinit var credentialsPane: LinearLayout
     private var cancel: AtomicBoolean? = null
     private var challengeDialog: AlertDialog? = null
+    private var browserHandoff = false
     private val subscriptionRequests = LatestResultGate()
 
     override fun onResume() {
         super.onResume()
+        if (browserHandoff) {
+            browserHandoff = false
+            ParentSession.endExternalUi()
+        }
         if (!ParentSession.authorized()) finish()
     }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        UiDevice.showSystemBarsForHandheld(this)
         if (!settings.hasPin || !ParentSession.authorized()) {
             finish()
             return
@@ -71,7 +82,8 @@ class GoogleAccountActivity : Activity() {
         val layout = TvUi.column(this)
         scrolling.addView(layout)
         setContentView(scrolling)
-        layout.addView(TvUi.label(this, "Google / YouTube 授权", 29f, true))
+        layout.addView(TvUi.label(this, "Google / YouTube 授权",
+            if (UiDevice.isHandheld(this)) 24f else 29f, true))
         layout.addView(TvUi.label(this,
             "家长用手机完成授权。只有家长之后勾选的频道才会加入儿童白名单。", 17f))
         status = TvUi.label(this,
@@ -83,7 +95,8 @@ class GoogleAccountActivity : Activity() {
         layout.addView(status)
         TvUi.space(layout, this, 12)
 
-        layout.addView(TvUi.primaryButton(this, "手机扫码授权 Google") {
+        layout.addView(TvUi.primaryButton(this,
+            if (UiDevice.isHandheld(this)) "获取 Google 验证码" else "手机扫码授权 Google") {
             if (!auth.isConfigured || credentialsPane.visibility == View.VISIBLE) {
                 if (saveCredentials()) {
                     credentialsPane.visibility = View.GONE
@@ -203,40 +216,85 @@ class GoogleAccountActivity : Activity() {
     }
 
     private fun showChallenge(challenge: TvDeviceCode, cancelled: AtomicBoolean) {
-        val description = TvUi.label(this,
+        val phone = UiDevice.isHandheld(this)
+        val description = TvUi.label(this, if (phone) {
+            "① 复制验证码：${challenge.userCode}\n" +
+            "② 用浏览器打开 Google 授权页并输入验证码。\n" +
+            "③ 返回 KidsTubeTV，等待授权结果。"
+        } else {
             "请用手机或电脑打开以下网址：\n\n" +
-            challenge.verificationUrl + "\n\n输入验证码（请区分大小写）：\n\n" +
-            challenge.userCode + "\n\n同意只读访问 YouTube 订阅资料。", 21f)
+            challenge.verificationUrl + "\n\n输入验证码：\n\n" +
+            challenge.userCode + "\n\n同意只读访问 YouTube 订阅资料。"
+        }, if (phone) 17f else 21f)
         val panel = TvUi.column(this)
         panel.addView(description)
-        // QR contains only Google's verification URL, not OAuth tokens,
-        // the device code or the user's YouTube account identifiers.
-        runCatching {
-            val matrix = QRCodeWriter().encode(
-                challenge.verificationUrl, BarcodeFormat.QR_CODE, 360, 360,
-                mapOf(EncodeHintType.MARGIN to 2)
-            )
-            val pixels = IntArray(360 * 360) { index ->
-                if (matrix[index % 360, index / 360]) Color.BLACK else Color.WHITE
+        if (!phone) {
+            // A TV QR contains only an official verification URL, not tokens.
+            runCatching {
+                val matrix = QRCodeWriter().encode(
+                    challenge.verificationUrl, BarcodeFormat.QR_CODE, 360, 360,
+                    mapOf(EncodeHintType.MARGIN to 2)
+                )
+                val pixels = IntArray(360 * 360) { index ->
+                    if (matrix[index % 360, index / 360]) Color.BLACK else Color.WHITE
+                }
+                val bitmap = Bitmap.createBitmap(360, 360, Bitmap.Config.ARGB_8888)
+                bitmap.setPixels(pixels, 0, 360, 0, 0, 360, 360)
+                val qr = ImageView(this).apply {
+                    setImageBitmap(bitmap)
+                    contentDescription = "扫码打开 Google 官方设备授权页面"
+                }
+                panel.addView(qr, LinearLayout.LayoutParams(
+                    TvUi.dp(this, 250), TvUi.dp(this, 250)
+                ))
             }
-            val bitmap = Bitmap.createBitmap(360, 360, Bitmap.Config.ARGB_8888)
-            bitmap.setPixels(pixels, 0, 360, 0, 0, 360, 360)
-            val qr = ImageView(this).apply {
-                setImageBitmap(bitmap)
-                contentDescription = "扫码打开 Google 官方设备授权页面"
-            }
-            panel.addView(qr, LinearLayout.LayoutParams(
-                TvUi.dp(this, 250), TvUi.dp(this, 250)
-            ))
         }
-        challengeDialog = AlertDialog.Builder(this)
-            .setTitle("Google TV 授权 · 手机扫码")
+        val builder = AlertDialog.Builder(this)
+            .setTitle(if (phone) "Google 验证码 · 手机授权" else "Google TV 授权 · 手机扫码")
             .setView(panel)
             .setNegativeButton("取消登录") { _, _ -> cancelled.set(true) }
-            .create().also { dialog ->
-                dialog.setOnDismissListener { cancelled.set(true) }
-                dialog.show()
+        if (phone) {
+            builder.setNeutralButton("复制验证码", null)
+                .setPositiveButton("打开授权网页", null)
+        }
+        challengeDialog = builder.create().also { dialog ->
+            dialog.setOnDismissListener { cancelled.set(true) }
+            dialog.show()
+            if (phone) {
+                // Replacing default click handlers prevents Android AlertDialog
+                // from closing and cancelling the still-polling device code.
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                    copyDeviceCode(challenge.userCode)
+                    status.text = "验证码已复制，打开 Google 授权页后粘贴"
+                }
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+                    if (cancelled.get() || !ParentSession.authorized()) return@setOnClickListener
+                    copyDeviceCode(challenge.userCode)
+                    val url = challenge.verificationUrl
+                    if (!url.startsWith("https://")) {
+                        status.text = "Google 授权网址不是 HTTPS，已取消跳转"
+                        return@setOnClickListener
+                    }
+                    // The Android browser is outside this app-only VPN.
+                    // Allow an explicit, short-lived external UI transition only
+                    // for the parent; do not allow arbitrary background access.
+                    ParentSession.allowExternalUi()
+                    browserHandoff = true
+                    runCatching {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }.onFailure {
+                        browserHandoff = false
+                        ParentSession.endExternalUi()
+                        status.text = "无法打开浏览器，可手动访问：" + url
+                    }
+                }
             }
+        }
+    }
+
+    private fun copyDeviceCode(userCode: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Google TV 验证码", userCode))
     }
 
     private fun chooseSubscriptions() {
