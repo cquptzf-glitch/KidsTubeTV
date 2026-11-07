@@ -47,6 +47,8 @@ class MainActivity : Activity() {
     private lateinit var errorBar: TextView
     private lateinit var dimmer: View
     private lateinit var drawer: LinearLayout
+    private lateinit var drawerHost: ScrollView
+    private val screen by lazy { UiDevice.dimensions(this) }
     private var drawerFocus: View? = null
     private var showCollectionKey = "home"
     private var nextRequest = 0
@@ -96,6 +98,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        UiDevice.showSystemBarsForHandheld(this)
         buildLayout()
     }
 
@@ -177,13 +180,24 @@ class MainActivity : Activity() {
 
         val top = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(TvUi.dp(this@MainActivity, 44), TvUi.dp(this@MainActivity, 10),
-                TvUi.dp(this@MainActivity, 42), TvUi.dp(this@MainActivity, 2))
+            val pad = if (screen.handheld) 10 else 44
+            setPadding(TvUi.dp(this@MainActivity, pad), TvUi.dp(this@MainActivity, 4),
+                TvUi.dp(this@MainActivity, pad), TvUi.dp(this@MainActivity, 2))
         }
-        top.addView(TvUi.label(this, "KidsTubeTV", 22f, true).apply {
+        if (screen.handheld) {
+            top.addView(TvUi.button(this, "☰ 菜单") { openDrawer() }.apply {
+                textSize = 14f
+                contentDescription = "打开首页分类和家长设置"
+                setPadding(TvUi.dp(this@MainActivity, 11), 0,
+                    TvUi.dp(this@MainActivity, 11), 0)
+            }, LinearLayout.LayoutParams(-2, TvUi.dp(this, 40)).apply {
+                rightMargin = TvUi.dp(this@MainActivity, 7)
+            })
+        }
+        top.addView(TvUi.label(this, "KidsTubeTV", if (screen.handheld) 18f else 22f, true).apply {
             setTypeface(typeface, Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        status = TvUi.label(this, "● 网络检测中", 13f).apply {
+        status = TvUi.label(this, "● 网络检测中", if (screen.handheld) 11f else 13f).apply {
             setTextColor(TvUi.muted)
         }
         refreshIndicator = TvUi.label(this, "↻ 正在更新…", 13f).apply {
@@ -193,14 +207,16 @@ class MainActivity : Activity() {
         }
         top.addView(refreshIndicator)
         top.addView(status)
-        body.addView(top, LinearLayout.LayoutParams(-1, TvUi.dp(this, 49)))
+        body.addView(top, LinearLayout.LayoutParams(-1, TvUi.dp(this,
+            if (screen.handheld) 53 else 49)))
 
         scrolling = ScrollView(this).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
             clipToPadding = false
-            setPadding(TvUi.dp(this@MainActivity, 44), TvUi.dp(this@MainActivity, 4),
-                TvUi.dp(this@MainActivity, 44), TvUi.dp(this@MainActivity, 88))
+            val pad = TvUi.dp(this@MainActivity, screen.horizontalPaddingDp)
+            setPadding(pad, TvUi.dp(this@MainActivity, 4),
+                pad, TvUi.dp(this@MainActivity, if (screen.handheld) 72 else 88))
         }
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -217,15 +233,23 @@ class MainActivity : Activity() {
             isFocusable = false
         }
         frame.addView(dimmer, FrameLayout.LayoutParams(-1, -1))
-        drawer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(TvUi.dp(this@MainActivity, 15), TvUi.dp(this@MainActivity, 24),
-                TvUi.dp(this@MainActivity, 15), TvUi.dp(this@MainActivity, 26))
-            setBackgroundColor(0xFF152932.toInt())
+        drawerHost = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            isFillViewport = true
             visibility = View.GONE
             elevation = TvUi.dp(this@MainActivity, 22).toFloat()
+            setBackgroundColor(0xFF152932.toInt())
         }
-        frame.addView(drawer, FrameLayout.LayoutParams(TvUi.dp(this, 235), -1, Gravity.START))
+        drawer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(TvUi.dp(this@MainActivity, 15), TvUi.dp(this@MainActivity, 20),
+                TvUi.dp(this@MainActivity, 15), TvUi.dp(this@MainActivity, 26))
+            setBackgroundColor(0xFF152932.toInt())
+        }
+        drawerHost.addView(drawer)
+        frame.addView(drawerHost, FrameLayout.LayoutParams(
+            TvUi.dp(this, screen.drawerWidthDp), -1, Gravity.START
+        ))
         buildDrawer()
 
         errorBar = TvUi.label(this, "", 16f).apply {
@@ -249,10 +273,12 @@ class MainActivity : Activity() {
             }
             visibility = View.GONE
         }
-        val barLp = FrameLayout.LayoutParams(-1, TvUi.dp(this, 56), Gravity.BOTTOM).apply {
-            leftMargin = TvUi.dp(this@MainActivity, 36)
-            rightMargin = TvUi.dp(this@MainActivity, 36)
-            bottomMargin = TvUi.dp(this@MainActivity, 15)
+        val barLp = FrameLayout.LayoutParams(-1,
+            if (screen.handheld) -2 else TvUi.dp(this, 56), Gravity.BOTTOM).apply {
+            val margin = TvUi.dp(this@MainActivity, if (screen.handheld) 12 else 36)
+            leftMargin = margin
+            rightMargin = margin
+            bottomMargin = TvUi.dp(this@MainActivity, if (screen.handheld) 10 else 15)
         }
         frame.addView(errorBar, barLp)
         showPlaceholder()
@@ -325,23 +351,24 @@ class MainActivity : Activity() {
     }
 
     private fun openDrawer() {
-        if (drawer.visibility == View.VISIBLE) return
+        if (drawerHost.visibility == View.VISIBLE) return
         drawerFocus = currentFocus
         buildDrawer()
+        drawerHost.scrollTo(0, 0)
         dimmer.visibility = View.VISIBLE
-        drawer.visibility = View.VISIBLE
-        (drawer.getChildAt(2) ?: drawer).requestFocus()
+        drawerHost.visibility = View.VISIBLE
+        if (!screen.handheld) (drawer.getChildAt(2) ?: drawer).requestFocus()
         scheduleDrawerHide()
     }
 
     private fun scheduleDrawerHide() {
         mainHandler.removeCallbacks(hideDrawerLater)
-        mainHandler.postDelayed(hideDrawerLater, 10_000)
+        if (!screen.handheld) mainHandler.postDelayed(hideDrawerLater, 10_000)
     }
 
     private fun hideDrawer(restoreFocus: Boolean = true) {
         mainHandler.removeCallbacks(hideDrawerLater)
-        drawer.visibility = View.GONE
+        drawerHost.visibility = View.GONE
         dimmer.visibility = View.GONE
         if (restoreFocus) {
             val target = drawerFocus
@@ -353,7 +380,9 @@ class MainActivity : Activity() {
         list.removeAllViews()
         val intro = TvUi.label(this, "今天想看点什么？", 34f, true)
         list.addView(intro)
-        list.addView(TvUi.label(this, "遥控器按 ← 可以打开菜单。", 16f))
+        list.addView(TvUi.label(this,
+            if (screen.handheld) "轻触左上角菜单，选择英语儿歌、故事或家长设置。"
+            else "遥控器按 ← 可以打开菜单。", 16f))
         TvUi.space(list, this, 26)
         if (!settings.ready) {
             val pending = mutableListOf<String>()
@@ -436,6 +465,7 @@ class MainActivity : Activity() {
         val request = ++nextRequest
         catalogTask?.cancel(true)
         catalogLoading = true
+        refreshIndicator.text = "↻ 正在更新…"
         refreshIndicator.visibility = if (reuseOldView) View.VISIBLE else View.GONE
         if (!reuseOldView) {
             list.removeAllViews()
@@ -502,8 +532,13 @@ class MainActivity : Activity() {
         }
         val ids = ArrayList(videos.map { it.id })
         val hero = TvHeroCard.make(this, videos.first(), name) { openVideo(ids, 0) }
-        val heroDp = (resources.displayMetrics.heightPixels /
-            resources.displayMetrics.density * 0.43f).toInt().coerceIn(255, 380)
+        val heroDp = if (screen.handheld) {
+            (resources.configuration.screenWidthDp * if (screen.compactHero) 0.62f else 0.4f)
+                .toInt().coerceIn(180, 290)
+        } else {
+            (resources.displayMetrics.heightPixels /
+                resources.displayMetrics.density * 0.43f).toInt().coerceIn(255, 380)
+        }
         list.addView(hero, LinearLayout.LayoutParams(-1, TvUi.dp(this, heroDp)))
         TvUi.space(list, this, 19)
         list.addView(TvUi.label(this, "发现更多精彩", 24f).apply {
@@ -511,10 +546,11 @@ class MainActivity : Activity() {
         })
         TvUi.space(list, this, 8)
 
-        val gap = TvUi.dp(this, 18)
+        val gap = TvUi.dp(this, screen.cardGapDp)
         val metrics = TvGridMetrics.calculate(
-            resources.displayMetrics.widthPixels, TvUi.dp(this, 88),
-            gap, TvUi.dp(this, 205)
+            resources.displayMetrics.widthPixels,
+            TvUi.dp(this, screen.horizontalPaddingDp * 2),
+            gap, TvUi.dp(this, screen.minimumCardWidthDp)
         )
         val columns = metrics.columns
         val cardWidth = metrics.cardWidth
@@ -715,7 +751,7 @@ class MainActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (::drawer.isInitialized && drawer.visibility == View.VISIBLE) {
+        if (::drawer.isInitialized && drawerHost.visibility == View.VISIBLE) {
             scheduleDrawerHide()
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
                 keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU) {
@@ -734,7 +770,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Back first closes the drawer, then exits on the TV home screen")
     override fun onBackPressed() {
-        if (::drawer.isInitialized && drawer.visibility == View.VISIBLE) {
+        if (::drawer.isInitialized && drawerHost.visibility == View.VISIBLE) {
             hideDrawer()
             return
         }
