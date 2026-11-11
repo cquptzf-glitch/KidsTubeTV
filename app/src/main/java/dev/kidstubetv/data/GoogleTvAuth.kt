@@ -3,10 +3,7 @@ package dev.kidstubetv.data
 import android.content.Context
 import org.json.JSONObject
 import dev.kidstubetv.proxy.ProxyStatus
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
-import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 data class TvDeviceCode(
@@ -34,6 +31,9 @@ class GoogleTvAuth(context: Context) {
 
     private val secret = SecurePrefs(context.applicationContext)
     private val prefs = context.getSharedPreferences("kids_google_tv_oauth", Context.MODE_PRIVATE)
+    private val http = GoogleOAuthHttpClient(
+        vpnReady = { ProxyStatus.phase == ProxyStatus.Phase.READY }
+    )
 
     var clientId: String
         get() = secret.get("oauth_client_id")
@@ -78,7 +78,7 @@ class GoogleTvAuth(context: Context) {
             require(isConfigured) { "请先设置 Google TV OAuth Client ID 和 Client Secret" }
             clientId to SESSION.snapshot()
         }
-        val (status, json) = post("https://oauth2.googleapis.com/device/code", mapOf(
+        val (status, json) = http.post("https://oauth2.googleapis.com/device/code", mapOf(
             "client_id" to idAtIssue,
             "scope" to "https://www.googleapis.com/auth/youtube.readonly",
         ))
@@ -111,7 +111,7 @@ class GoogleTvAuth(context: Context) {
             if (cancelled.get() || clientId != challenge.issuedClientId ||
                 !SESSION.isCurrent(challenge.issuedSession)) return
             val secretAtRequest = clientSecret
-            val (status, response) = post("https://oauth2.googleapis.com/token", mapOf(
+            val (status, response) = http.post("https://oauth2.googleapis.com/token", mapOf(
                 "client_id" to challenge.issuedClientId,
                 "client_secret" to secretAtRequest,
                 "device_code" to challenge.code,
@@ -153,7 +153,7 @@ class GoogleTvAuth(context: Context) {
         repeat(5) {
             val query = "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=50" +
                 if (token.isBlank()) "" else "&pageToken=" + enc(token)
-            val (code, response) = get(query, accessToken())
+            val (code, response) = http.getSubscriptions(query, accessToken())
             require(code in 200..299) {
                 YouTubeApiErrorPolicy.explain(code, response.optJSONObject("error"))
             }
@@ -192,7 +192,7 @@ class GoogleTvAuth(context: Context) {
             synchronized(CREDENTIAL_LOCK) {
                 Triple(clientId, clientSecret, SESSION.snapshot())
             }
-        val (code, response) = post("https://oauth2.googleapis.com/token", mapOf(
+        val (code, response) = http.post("https://oauth2.googleapis.com/token", mapOf(
             "client_id" to idForRefresh,
             "client_secret" to secretForRefresh,
             "refresh_token" to refresh,
@@ -224,43 +224,6 @@ class GoogleTvAuth(context: Context) {
         val expires = data.optLong("expires_in", 3600).coerceIn(30, 86400)
         prefs.edit().putLong("expires_at", System.currentTimeMillis() + expires * 1000 - 30_000).apply()
     }
-
-    private fun get(uri: String, token: String): Pair<Int, JSONObject> {
-        requireGoogleVpn()
-        val conn = URL(uri).openConnection() as HttpURLConnection
-        conn.connectTimeout = 12_000
-        conn.readTimeout = 18_000
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.setRequestProperty("Accept", "application/json")
-        try {
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val content = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            return code to JSONObject(if (content.isNotBlank()) content else "{}")
-        } finally { conn.disconnect() }
-    }
-
-    private fun post(endpoint: String, values: Map<String,String>): Pair<Int, JSONObject> {
-        requireGoogleVpn()
-        val conn = URL(endpoint).openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.doOutput = true
-        conn.connectTimeout = 12_000
-        conn.readTimeout = 18_000
-        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-        conn.setRequestProperty("Accept", "application/json")
-        val body = values.entries.joinToString("&") { (k, v) -> enc(k) + "=" + enc(v) }
-        try {
-            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            return status to JSONObject(if (response.isNotBlank()) response else "{}")
-        } finally { conn.disconnect() }
-    }
-
-    private fun requireGoogleVpn() =
-        GoogleRequestPolicy.requireAvailable(ProxyStatus.phase == ProxyStatus.Phase.READY)
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 }
