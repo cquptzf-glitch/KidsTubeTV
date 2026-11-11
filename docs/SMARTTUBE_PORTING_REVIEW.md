@@ -72,7 +72,7 @@ KidsTubeTV：
 ## 6. 验证顺序
 
 - Android CI Debug 编译 + Lint + JVM 测试。
-- 官方 FlClash AAR 变体编译 + 真实 VPN TCP/DNS/IPv6 实机检查。
+- `libmihomo-android v0.3.13` 固定 AAR 校验、编译及真实 VPN TCP/DNS/IPv6 实机检查。
 - Google TV OAuth 设备码 → 成功授权 → token refresh → 读取频道 → 家长选择导入。
 - 电视遥控器焦点/返回/刷新后位置保持、网络错误不清空屏幕、不同分辨率缩放。
 - 视频允许/拒绝/网络断开/播放失败重试/日限时、前后台的边界行为。

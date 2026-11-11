@@ -6,10 +6,10 @@ import io.github.oviron.libmihomo.TunInterface
 import org.json.JSONObject
 
 internal object NativeCoreFactory {
-    fun create(): NativeProxyCore = LegacyMihomoCore()
+    fun create(): NativeProxyCore = LibMihomoCore()
 }
 
-internal class LegacyMihomoCore : NativeProxyCore {
+internal class LibMihomoCore : NativeProxyCore {
     override val tunAddress = "172.19.0.2"
     override val tunDns = "1.1.1.1"
 
@@ -29,7 +29,7 @@ internal class LegacyMihomoCore : NativeProxyCore {
     override fun startTun(fd: Int, callbacks: NativeTunCallbacks): Boolean {
         val bridge = object : TunInterface {
             override fun protect(fd: Int) {
-                // This old Go bridge discards the Boolean; VpnService handles failure.
+                // This JNI bridge has a void protect callback; VpnService handles failure.
                 callbacks.protectSocket(fd)
             }
             override fun resolverProcess(

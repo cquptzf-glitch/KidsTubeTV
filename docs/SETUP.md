@@ -1,4 +1,4 @@
-> beta.9 起的预览 APK 与旧版使用不同 app ID，可与旧版并行安装，无需卸载清除旧配置。请先读 [安装和签名排查](INSTALL_AND_SIGNING.md)；ADB 的包名要以 Release 的 `APK_INSTALL_INFO.txt` 为准。
+> 当前 main 采用固定 `libmihomo-android v0.3.13` AAR；普通 Debug、独立预览 APK 与正式 Release 的签名/包名可能不同。升级前请读 [安装与签名排查](INSTALL_AND_SIGNING.md)。
 
 # 构建和雷鸟电视安装
 
@@ -7,7 +7,7 @@
 - Android 9 (API 28) 及以上；请使用 `adb shell getprop ro.build.version.sdk` 确认电视**实际**固件
 - JDK 17、Gradle 8.13、Android SDK Platform/Build Tools 36
 - `armeabi-v7a` 或 `arm64-v8a` 原生库按 `adb shell getprop ro.product.cpu.abilist` 检查
-- 当前版本 `0.2.0`，包名 `dev.kidstubetv`
+- 主线默认包名 `dev.kidstubetv`；具体版本号查看 APK `aapt dump badging` 输出
 
 ## 从源码生成 Debug APK
 
@@ -18,7 +18,7 @@ powershell -ExecutionPolicy Bypass -File scripts/fetch-mihomo.ps1
 gradle :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Linux/macOS：`bash scripts/fetch-mihomo.sh && gradle :app:testDebugUnitTest :app:assembleDebug`。在 IDE 中可打开工程，预先下载被忽略的 AAR 文件到 `app/libs/`。尽量避免手动更换 AAR 版本，下载脚本固定 SHA-256 校验。
+Linux/macOS：`bash scripts/fetch-mihomo.sh && gradle :app:lintDebug :app:testDebugUnitTest :app:assembleDebug`。在 IDE 中可打开工程，预先下载被忽略的 AAR 文件到 `app/libs/`。尽量避免手动更换 AAR 版本，下载脚本固定 SHA-256 校验。
 
 可选通过 [GitHub Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml) 下载成功运行后的 **KidsTubeTV-debug-apk** Artifact。
 
@@ -52,7 +52,7 @@ adb logcat -s AndroidRuntime chromium
 - Debug 与 Release 如果签名不同，不能原位升级：Android 不允许签名不一致的 APK 覆盖安装；正式签名在首次正式版后保持固定。
 - 保存的订阅 URL 和 YouTube API Key 通过 Android Keystore 加密；清除应用数据将一并清除。
 - `config.yaml` 放在应用私有 `files/mihomo/`，含节点密码/订阅配置，不要把应用数据备份上传公开仓库。
-- Mihomo SDK v0.3.13 **要求**读取 `<home-dir>/config.yaml`，App 已按该契约保存文件，并传入正确 `home-dir` 和 Android 版本。自动更新写入的新 YAML 在下次 VPN 连接时生效。
+- `oviron/libmihomo-android` v0.3.13 **要求**读取 `<home-dir>/config.yaml`，App 已按该契约保存文件，并传入正确 `home-dir` 和 Android 版本。自动更新写入的新 YAML 在下次 VPN 连接时生效。
 
 ## 当前验证状态
 

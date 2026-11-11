@@ -7,10 +7,10 @@ import org.json.JSONObject
 
 /** Adapt to the libmihomo-android v0.3.13 action envelope (callback is async). */
 internal object ProxyControlFactory {
-    fun create(): ProxyControlBackend = LegacyProxyControl()
+    fun create(): ProxyControlBackend = LibMihomoProxyControl()
 }
 
-internal class LegacyProxyControl : ProxyControlBackend {
+internal class LibMihomoProxyControl : ProxyControlBackend {
     private val main = Handler(Looper.getMainLooper())
     override fun queryGroups(done: (Result<List<ProxyGroup>>) -> Unit) {
         invoke("getProxies", "") { result ->

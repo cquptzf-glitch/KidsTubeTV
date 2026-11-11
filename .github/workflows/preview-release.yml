@@ -1,14 +1,26 @@
-name: KidsTubeTV preview release (signed APK, official FlClash)
+name: KidsTubeTV preview release (libmihomo-android)
 on:
-  push:
-    branches:
-      - "publish-preview/v0.3.0-beta.9"
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Pre-release version (without v prefix)'
+        required: true
+        default: '0.3.0-beta.10'
+      version_code:
+        description: 'Increasing Android versionCode'
+        required: true
+        default: '12'
+      preview_suffix:
+        description: 'Isolated package suffix when no private preview signer is configured'
+        required: true
+        default: '.preview.b10'
 permissions:
   contents: write
 jobs:
   preview:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 110
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -18,129 +30,97 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.0'
-          cache: false
-      - name: Install Android SDK and NDK
+      - name: Install Android SDK platform
         run: |
-          SDK_MANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
-          "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
-      - name: Prepare private signing or isolated fresh-install package
+          "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Validate preview version
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          PREVIEW_SUFFIX: ${{ inputs.preview_suffix }}
+        run: |
+          [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] || exit 1
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || exit 1
+          [[ "$PREVIEW_SUFFIX" =~ ^\.preview\.b[1-9][0-9]*$ ]] || exit 1
+          echo "KIDSTUBE_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "KIDSTUBE_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+      - name: Prepare preview signing or isolated debug package
         env:
           KIDSTUBE_PREVIEW_KEYSTORE_BASE64: ${{ secrets.KIDSTUBE_PREVIEW_KEYSTORE_BASE64 }}
           KIDSTUBE_PREVIEW_STORE_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_STORE_PASSWORD }}
           KIDSTUBE_PREVIEW_KEY_ALIAS: ${{ secrets.KIDSTUBE_PREVIEW_KEY_ALIAS }}
           KIDSTUBE_PREVIEW_KEY_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_KEY_PASSWORD }}
-          KIDSTUBE_PREVIEW_FALLBACK_SUFFIX: .preview.b9
-        run: |
-          bash -n scripts/prepare-preview-signing.sh
-          bash scripts/prepare-preview-signing.sh
-      - name: Build pinned official FlClash v0.9.3
-        run: |
-          bash -n scripts/build-official-flclash-core.sh
-          bash scripts/build-official-flclash-core.sh
-          mkdir -p app/libs
-          cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
-      - name: Lint, JVM tests, build signed Debug APK
+          KIDSTUBE_PREVIEW_FALLBACK_SUFFIX: ${{ inputs.preview_suffix }}
+        run: bash scripts/prepare-preview-signing.sh
+      - name: Download and verify pinned libmihomo AAR
+        run: bash scripts/fetch-mihomo.sh
+      - name: Lint, unit tests and signed preview APK
         env:
-          KIDSTUBE_VERSION_NAME: 0.3.0-beta.9
-          KIDSTUBE_VERSION_CODE: 11
           KIDSTUBE_PREVIEW_STORE_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_STORE_PASSWORD }}
           KIDSTUBE_PREVIEW_KEY_ALIAS: ${{ secrets.KIDSTUBE_PREVIEW_KEY_ALIAS }}
           KIDSTUBE_PREVIEW_KEY_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_KEY_PASSWORD }}
-        run: |
-          gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
-      - name: Verify signature, package ID, min SDK, ABIs, zip alignment
+        run: gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify APK signature, min SDK, ABIs and alignment
         shell: bash
         run: |
           set -euo pipefail
-          BT="$ANDROID_HOME/build-tools/36.0.0"
+          BT="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0"
           APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           mkdir -p dist/release
           "$BT/apksigner" verify --min-sdk-version 28 --verbose --print-certs "$APK" | tee dist/release/APK_SIGNATURE.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' dist/release/APK_SIGNATURE.txt
           "$BT/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
-          grep -E "^(package:|sdkVersion:|targetSdkVersion:|native-code:)" "$RUNNER_TEMP/apk-badging.txt"
           EXPECTED_PACKAGE="dev.kidstubetv$KIDSTUBE_PREVIEW_PACKAGE_SUFFIX"
           grep -Fq "package: name='$EXPECTED_PACKAGE'" "$RUNNER_TEMP/apk-badging.txt"
           grep -Fq "sdkVersion:'28'" "$RUNNER_TEMP/apk-badging.txt"
           unzip -Z -1 "$APK" > "$RUNNER_TEMP/apk-files.txt"
           for ABI in armeabi-v7a arm64-v8a; do
-            grep -q "^lib/$ABI/" "$RUNNER_TEMP/apk-files.txt" || {
-              echo "::error::Required $ABI native libraries missing from APK" >&2
-              exit 1
-            }
+            grep -q "^lib/$ABI/" "$RUNNER_TEMP/apk-files.txt"
           done
           "$BT/zipalign" -c -v 4 "$APK" >/dev/null
-          NAME="KidsTubeTV-v0.3.0-beta.9-FlClash-INSTALLABLE.apk"
+          NAME="KidsTubeTV-v${KIDSTUBE_VERSION_NAME}-libmihomo-android9.apk"
           cp "$APK" "dist/release/$NAME"
-          cp dist/flclash-core/SOURCE-INFO.txt dist/release/FLCLASH-SOURCE-INFO.txt
-          cp dist/flclash-core/FlClash-LICENSE dist/release/FlClash-LICENSE
+          cat > dist/release/LIBMIHOMO-SOURCE-INFO.txt <<'INFO'
+          Upstream: https://github.com/oviron/libmihomo-android
+          Artifact: libmihomo-android-v0.3.13.aar
+          Version: v0.3.13
+          SHA-256: c6c2787e5dd888a8f9193501506dfa3a4f8a38fbd51adefccf67d84d0c8e0fb5
+          License: GPL-3.0 (review upstream dependencies before redistribution)
+          INFO
           (cd dist/release && sha256sum "$NAME" > SHA256SUMS.txt)
           {
-            echo "KidsTubeTV v0.3.0-beta.9"
             echo "APK: $NAME"
             echo "Application ID: $EXPECTED_PACKAGE"
             echo "Signing: $KIDSTUBE_PREVIEW_SIGNING_MODE"
             echo "Minimum Android: 9 (API 28)"
-            echo "Native ABIs: armeabi-v7a, arm64-v8a"
-            echo "APK SHA-256:"
+            echo "ABIs: armeabi-v7a, arm64-v8a"
             cat dist/release/SHA256SUMS.txt
-            echo "Certificate:"
             grep '^Signer #1 certificate SHA-256 digest:' dist/release/APK_SIGNATURE.txt
-            echo "A valid signature does not guarantee installability on an unsupported device."
           } > dist/release/APK_INSTALL_INFO.txt
-          cat dist/release/APK_INSTALL_INFO.txt
-      - name: Write honest installation and signing notes
+      - name: Write preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          ## v0.3.0-beta.9 — signed Android TV + phone installation preview
-
-          **CI verifies APK signing and its v2 signature.** See APK_SIGNATURE.txt,
-          APK_INSTALL_INFO.txt, SHA256SUMS.txt and the successful workflow.
-
-          Older beta builds used temporary Debug keystores on GitHub runners.
-          Their certificates can differ, making Android reject in-place upgrades
-          with "App not installed" / INSTALL_FAILED_UPDATE_INCOMPATIBLE.
-
-          **This release uses a separate installable preview package** to avoid
-          touching your existing dev.kidstubetv installation and settings.
-          - Without private preview signing secrets: dev.kidstubetv.preview.b9,
-            an Android Debug-signed test app. This is a fresh parallel install,
-            NOT an in-place update, and not reusable for the next beta.
-          - With private stable preview signing secrets: dev.kidstubetv.preview,
-            signed with that private key and updatable by future builds using
-            the exact same key, app ID and increasing versionCode.
-          - NEVER commit a private signing key to this public repository.
-          - The prior app's Clash settings and parental PIN are not copied.
-          - Android supports only one active VPN service; stop the previous
-            KidsTubeTV VPN before starting this test app.
-          - Hardware verification remains necessary; native ARM libraries are
-            packaged for armeabi-v7a and arm64-v8a, Android 9+.
-
-          Additional release features: Clash URL copy/edit and safe download retry,
-          responsive phone/TV interface, parental approval and network diagnostics.
-
-          Troubleshooting: docs/INSTALL_AND_SIGNING.md.
-          NOTE: CI verification is not a physical-device installation test.
+          Preview APK built from main using pinned libmihomo-android v0.3.13.
+          Signature, Android 9 minSDK, native ABIs and zip alignment verified by CI.
+          Without private preview signing secrets, this is a VERSION-SCOPED parallel
+          installation, NOT an in-place upgrade. Google login, TUN networking and
+          YouTube playback still require real-device verification.
           EOF
-      - name: Publish signed APK prerelease
+      - name: Publish prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.0-beta.9
+          tag_name: v${{ inputs.version_name }}
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v0.3.0-beta.9 — installable signed phone/TV preview
+          name: KidsTubeTV v${{ inputs.version_name }} — libmihomo preview
           prerelease: true
           draft: false
-          generate_release_notes: false
           body_path: dist/release/RELEASE_NOTES.md
           files: |
             dist/release/*.apk
             dist/release/SHA256SUMS.txt
             dist/release/APK_SIGNATURE.txt
             dist/release/APK_INSTALL_INFO.txt
-            dist/release/FLCLASH-SOURCE-INFO.txt
-            dist/release/FlClash-LICENSE
+            dist/release/LIBMIHOMO-SOURCE-INFO.txt

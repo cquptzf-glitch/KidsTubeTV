@@ -557,9 +557,6 @@ class SettingsActivity : Activity() {
             when {
                 ProxyStatus.phase == ProxyStatus.Phase.ERROR ->
                     "\n" + ProxyStatus.detail
-                ProxyStatus.phase == ProxyStatus.Phase.READY &&
-                    dev.kidstubetv.proxy.ProxyDnsStatus.underlyingCount == 0 ->
-                    "\n未检测到物理网络 DNS，请打开网络诊断"
                 else -> ""
             }
         subscriptionRefreshTile.visibility =

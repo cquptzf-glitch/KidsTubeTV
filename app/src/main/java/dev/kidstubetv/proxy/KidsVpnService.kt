@@ -7,11 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.net.VpnService
-import android.net.ConnectivityManager
-import android.content.Context
-import android.os.Process
-import java.net.InetSocketAddress
-import java.net.URI
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -32,34 +27,12 @@ class KidsVpnService : VpnService() {
         }
         override fun resolverProcess(protocol: Int, source: String, target: String, uid: Int) = ""
 
-        // FlClash uses /proc/net on Android 9 and the OS API on 10+.
-        override fun resolveUid(protocol: Int, source: String, target: String): Int {
-            if (Build.VERSION.SDK_INT < 29) return -1
-            return runCatching {
-                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                cm.getConnectionOwnerUid(
-                    protocol, socketAddress(source), socketAddress(target)
-                )
-            }.getOrDefault(-1)
-        }
-        override fun resolvePackage(uid: Int): String = if (uid == Process.myUid()) {
-            packageName
-        } else ""
-    }
-
-    private fun socketAddress(raw: String): InetSocketAddress {
-        val uri = URI("tcp://$raw")
-        require(uri.port in 0..65535 && !uri.host.isNullOrBlank()) {
-            "Invalid address passed by native VPN core"
-        }
-        return InetSocketAddress(uri.host, uri.port)
     }
     private val core: NativeProxyCore = NativeCoreFactory.create()
     private val main = Handler(Looper.getMainLooper())
     private var tunStarted = false
     private var tunAttempted = false
     private var failed = false
-    private var dnsMonitor: UnderlyingDnsMonitor? = null
 
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -100,14 +73,7 @@ class KidsVpnService : VpnService() {
                         if (!error.isNullOrEmpty()) {
                             fail(VpnFailurePolicy.fromSetup(error), sessionId)
                         } else {
-                            // Official core's "system" DNS has no Android fallback.
-                            // Give it physical network DNS, not our own TUN DNS.
-                            try {
-                                startDnsMonitor(sessionId)
-                                establishTun(sessionId)
-                            } catch (cause: Throwable) {
-                                fail(VpnFailurePolicy.fromException(cause, "DNS"), sessionId)
-                            }
+                            establishTun(sessionId)
                         }
                     }
                 }
@@ -119,16 +85,6 @@ class KidsVpnService : VpnService() {
 
     private fun isCurrent(sessionId: Long): Boolean =
         sessions.current(sessionId)
-
-    private fun startDnsMonitor(sessionId: Long) {
-        dnsMonitor?.stop()
-        dnsMonitor = UnderlyingDnsMonitor(this, core.tunDns) { servers ->
-            if (isCurrent(sessionId)) {
-                ProxyDnsStatus.underlyingCount = servers.size
-                core.updateSystemDns(servers)
-            }
-        }.also { it.start() }
-    }
 
     private fun establishTun(sessionId: Long) {
         if (!isCurrent(sessionId)) return
@@ -142,7 +98,7 @@ class KidsVpnService : VpnService() {
                 .addAllowedApplication(packageName)
 
             val pfd = builder.establish() ?: error("System refused to establish VPN")
-            // Both Go backends own this detached FD once startTun is called.
+            // libmihomo-android owns this detached FD once startTun is called.
             // A failed or throwing native start may have partially installed
             // socket hooks; stopTun must run even when no READY state was set.
             val fd = pfd.detachFd()
@@ -188,9 +144,6 @@ class KidsVpnService : VpnService() {
             stopSelf()
             return
         }
-        dnsMonitor?.stop()
-        dnsMonitor = null
-        ProxyDnsStatus.underlyingCount = 0
         val cleanup = runCatching {
             if (tunAttempted) core.stopTun()
         }

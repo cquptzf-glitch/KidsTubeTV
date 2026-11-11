@@ -3,9 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val kidsTubeOfficialCore = providers.gradleProperty("kidsTubeOfficialCore")
-    .map(String::toBoolean).getOrElse(false)
-
 // Preview APKs use a separate app ID so a test install does not overwrite
 // an older build with an unrelated, ephemeral GitHub-hosted debug signature.
 // The package suffix is injected only by CI; normal release IDs are unchanged.
@@ -17,11 +14,6 @@ require(previewPackageSuffix.isEmpty() ||
 
 android {
     namespace = "dev.kidstubetv"
-    sourceSets {
-        getByName("main").java.srcDir(
-            if (kidsTubeOfficialCore) "src/official/java" else "src/legacy/java"
-        )
-    }
     compileSdk = 36
     defaultConfig {
         applicationId = "dev.kidstubetv" + previewPackageSuffix
@@ -87,14 +79,8 @@ dependencies {
     // Maintained third-party YouTube IFrame wrapper; NOT BabyTube code.
     implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:13.0.0")
 
-    // GPLv3 Mihomo Android bridge. Run scripts/fetch-mihomo.sh or .ps1 before build.
-    // Build with -PkidsTubeOfficialCore=true after generating the FlClash AAR.
-    // Exactly one JNI backend is packaged; no duplicate native libraries.
-    if (kidsTubeOfficialCore) {
-        implementation(files("libs/flclash-core-v0.9.3.aar"))
-    } else {
-        implementation(files("libs/libmihomo-android-v0.3.13.aar"))
-    }
+    // Single native backend, verified SHA-256 via scripts/fetch-mihomo.sh/.ps1.
+    implementation(files("libs/libmihomo-android-v0.3.13.aar"))
 
     implementation("com.github.bumptech.glide:glide:4.16.0")
     implementation("com.google.zxing:core:3.5.3")

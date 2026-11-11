@@ -1,6 +1,6 @@
-## beta.9 安装说明
+## 主线 libmihomo-android 安装说明
 
-当前下载安装失败优先查 [安装与签名排查](INSTALL_AND_SIGNING.md)。beta.8 与更早的 GitHub Actions Debug 包可能无法相互覆盖；beta.9 默认采用独立 `dev.kidstubetv.preview.b9` 测试包名并在发布流水线检查 APK v2 签名。它与旧版并行安装，旧配置不自动迁移。
+当前主线使用固定 `libmihomo-android v0.3.13` AAR；请从本轮修改合并后的 main CI 构建获取 APK。历史预览包与当前源码不是同一构建，签名和包名仍应以 [安装与签名排查](INSTALL_AND_SIGNING.md) 为准。
 
 # KidsTubeTV · Android 手机安装与功能验证（beta.7）
 
@@ -8,7 +8,7 @@
 
 ## 1. 安装前须知
 
-- 从 [v0.3.0-beta.8 Release](https://github.com/cquptzf-glitch/KidsTubeTV/releases/tag/v0.3.0-beta.8) 获取带 `FlClash` 标识的预览 APK；安装后应该在普通手机应用列表里看到 KidsTubeTV。
+- 从修改后的 `main` 构建新 Debug APK（或下载本次改动合并后的 CI Artifact）。旧 beta 发布包不代表当前内核；安装后应在应用列表里看到 KidsTubeTV。
 - APK 使用 GitHub Actions 临时 Debug 签名，不保证与 beta.6 可覆盖更新。Android 若提示签名不匹配，先**在自己的安全位置记录 Clash 订阅、Google Cloud 凭据配置、家长批准列表**，再卸载旧版。应用设置 `allowBackup=false`，不要假设系统备份可恢复内部配置，也不要将密钥发给开发者或聊天。
 - Android 同时通常只允许一个 VPN：启用 KidsTubeTV VPN 时可能会断开另一款 VPN；且只有 KidsTubeTV 自身 App 被添加到 VPN 路由，手机外部浏览器**不经过**该应用的 VPN。仍需通过自己的网络确保浏览器可访问 Google。
 
@@ -40,7 +40,7 @@
 ## 4. 有线 ADB 方式（可选）
 
 ```bash
-adb install -r KidsTubeTV-v0.3.0-beta.8-FlClash-PREVIEW.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n dev.kidstubetv/.ui.MainActivity
 adb logcat -d -s AndroidRuntime:E
 ```
@@ -49,7 +49,7 @@ adb logcat -d -s AndroidRuntime:E
 
 ## 5. 验证边界
 
-- 当前 CI 只做 Lint、JVM 单测、Debug APK 打包与原生 FlClash 核心构建。没有连接你的真实手机或电视，也没有执行真实 VPN / OAuth / IFrame 的端到端测试。
+- 当前 CI 只做 Lint、JVM 单测、Debug APK 打包及固定 `libmihomo-android` AAR 的校验。没有连接你的真实手机或电视，也没有执行真实 VPN / OAuth / IFrame 的端到端测试。
 - “HTTPS 可达”不等于“API Key 通过”，而“API Key 通过”仍不等于“视频嵌入正常播放”。诊断逐项提示，别把某一步成功当作整体完成。
 - 如果手机/电视的 Google 网页不可达，先检查物理网络、系统 VPN 互斥、Android WebView 与 TV Google 授权客户端；不建议复制 SmartTube 第三方 OAuth Client Secret。
 

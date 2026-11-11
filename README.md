@@ -1,8 +1,8 @@
-**Android 手机 / TV 安装提示：**旧版 Pre-release 使用临时 Debug 签名，可能因证书不同导致覆盖安装报“应用未安装”。从 beta.9 起发布前必须通过 Android `apksigner` 校验；未配置稳定密钥时采用不与旧版冲突的独立测试包名。先看 [安装与签名故障排查](docs/INSTALL_AND_SIGNING.md) 和 [beta.9 Release](https://github.com/cquptzf-glitch/KidsTubeTV/releases/tag/v0.3.0-beta.9)。
+**Android 手机 / TV 安装提示：**旧版 Pre-release 使用临时 Debug 签名，可能因证书不同导致覆盖安装报“应用未安装”。从 beta.9 起发布前必须通过 Android `apksigner` 校验；未配置稳定密钥时采用不与旧版冲突的独立测试包名。先看 [安装与签名故障排查](docs/INSTALL_AND_SIGNING.md)。
 
 # KidsTubeTV
 
-为 Android TV（最低 **Android 9 / API 28**）开发的遥控器儿童视频应用，内置 Mihomo (Clash Meta) 应用专属 VPN，支持官方 FlClash Go 和旧版 JNI 两套后端。
+为 Android TV（最低 **Android 9 / API 28**）开发的遥控器儿童视频应用，内置 Mihomo (Clash Meta) 应用专属 VPN，仅使用 `oviron/libmihomo-android v0.3.13` 单一 JNI 后端。
 
 [![Android TV build](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml/badge.svg)](https://github.com/cquptzf-glitch/KidsTubeTV/actions/workflows/android.yml)
 
@@ -18,7 +18,7 @@
 - **应用专属 VPN：** 无需 Root；首次弹系统授权，打开应用后自动启用 VPN，显式退出立刻断开，Home 键退后台约 6 秒断开，不接管其他应用路由；网络持续异常自动退避重连（最多 3 次），家长手动断开不触发自动重连
 - **Google 登录（可选）：** 官方 TV OAuth 设备码授权，通过电视二维码在手机上登录，读取登录账户的 YouTube 订阅；**只有家长勾选的频道**才加入白名单
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
-- **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建采用官方 FlClash 核心的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
+- **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建使用固定 `libmihomo-android` 的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
 ## 最近完善（2026-11-06）
 
@@ -60,6 +60,7 @@
 - [Google 电视 OAuth 授权](docs/GOOGLE_LOGIN.md)
 - [CI/CD、签名配置和版本发布](docs/CI_CD.md)
 - [Android 9 电视验收清单](docs/TV_TEST_PLAN.md)
+- [遥控器与家长网络 UI 设计](docs/TV_UI_REVIEW.md)
 
 ## 许可与来源
 
@@ -69,9 +70,7 @@
 
 - [当前实现、未完成任务与静态验收](docs/FEATURE_STATUS.md)
 
-**开发说明：** 已添加[官方 FlClash Core 独立编译与 APK 静态验证流水线](docs/FLCLASH_CORE_BUILD.md)，但常规 APK 仍使用原 Mihomo 封装；开发阶段的静态验收状态详见[功能台账](docs/FEATURE_STATUS.md)。
-
-**官方核心独立 APK：** [FlClash 官方 Go 后端构建成功的 Actions](https://github.com/cquptzf-glitch/KidsTubeTV/actions/runs/42256808333) 已通过 Lint、单测与 APK 编译。默认 APK 仍用旧 Mihomo SDK；两个版本都未进行真实电视网络验收。
+**代理内核：** Debug、预览版与正式 Release 使用同一份经过 SHA-256 校验的 `libmihomo-android v0.3.13` AAR。详见[功能台账](docs/FEATURE_STATUS.md)与[CI/CD](docs/CI_CD.md)。
 
 ## 用手机辅助配置（不暴露订阅密钥）
 
@@ -81,17 +80,16 @@
 
 
 
-## v0.3.0-beta.2 TV 操作与网络更新
+## v0.3.0-beta.2 TV 操作与网络更新（历史功能记录）
 
 - 家长中心改成电视遥控器友好的两栏：左边固定“儿童内容 / 网络与 VPN / YouTube 账号”，右边是可滚动的大卡片操作，折叠高级功能。
 - 在网络页直接连接或重连 VPN、导入 Clash 订阅、切换节点和查看网络诊断。系统 VPN 授权过程保留短时家长会话。
-- 官方 FlClash 适配器新增 Android 底层 DNS 同步，修复此前缺少 `ACCESS_NETWORK_STATE` 且未调用 `Mobile.updateDns` 的问题；实际节点连接、DNS 路由、YouTube 播放仍需电视验证。
+- 当前使用 `libmihomo-android` 的 TUN/DNS 实现，不向原生内核调用其它后端专属的 DNS 同步接口；实际节点连接、DNS 路由、YouTube 播放仍需电视验证。
 
 预览版本使用 GitHub Actions 临时 Debug 签名，无法保证覆盖安装之前版本，注意备份应用配置。
 
 ## v0.3.0-beta.3 故障修复（预览）
 
-- 修正 beta.2 官方 FlClash 适配层的系统 DNS 参数：原先传裸 IP，现在参照上游 Android NetworkObserver 传 `IPv4:53` / `[IPv6]:53`。
 - VPN 网络检测异常不再阻止 Google OAuth、YouTube API、儿童视频重新审核和播放，也不会仅因单一 gstatic 探测网址失败重启 VPN；实际请求仍强制要求 App VPN 处于 READY。
 - Google 登录将客户端配置放到折叠区，并给出无效客户端、授权过期、YouTube 配额的安全错误提示；页面不会重新显示已保存的 Client Secret。
 - 诊断可以分别检测 Google OAuth 和 YouTube API 的 HTTPS 连通性，并显示脱敏的 VPN 错误类别；儿童首页显示尚未完成的配置步骤。
@@ -113,7 +111,7 @@
 
 新增首页全失败错误识别与自动冷却重试、Google TV OAuth 客户端切换后的令牌失效与回调隔离、播放 iframe 实际视频 ID 绑定及返回前台二次审核，以及多个栏目间的遥控器焦点/滚动恢复。详见 [SmartTube 评估与落地](docs/SMARTTUBE_PORTING_REVIEW.md)。
 
-仍然使用 YouTube Data API + IFrame 与官方 FlClash VPN 核心；本轮没有引入 SmartTube 非官方账号密钥、流解析及 ExoPlayer 服务层。预览版使用 CI 临时 Debug 签名，真实电视上的 VPN/Google 授权/视频播放需独立验证。
+当前仍使用 YouTube Data API + IFrame 与 `libmihomo-android` VPN 核心；本轮没有引入 SmartTube 非官方账号密钥、流解析及 ExoPlayer 服务层。预览版使用 CI 临时 Debug 签名，真实电视上的 VPN/Google 授权/视频播放需独立验证。
 
 ### v0.3.0-beta.6：架构、真实 API 检查与批量推荐
 

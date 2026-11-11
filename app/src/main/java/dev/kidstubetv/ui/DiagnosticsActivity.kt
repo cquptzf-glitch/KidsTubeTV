@@ -22,7 +22,6 @@ import dev.kidstubetv.data.YouTubeRepository
 import dev.kidstubetv.data.ApiProbeErrorPolicy
 import dev.kidstubetv.proxy.ProxyNetworkHealth
 import dev.kidstubetv.proxy.ProxyStatus
-import dev.kidstubetv.proxy.ProxyDnsStatus
 import dev.kidstubetv.proxy.GoogleEndpointProbe
 
 /**
@@ -226,8 +225,6 @@ class DiagnosticsActivity : Activity() {
         appendLine("VPN 阶段 / 最后状态: " + ProxyStatus.detail)
         appendLine("VPN HTTPS 检测: " + ProxyNetworkHealth.state.name)
         appendLine("探测地址状态: " + ProxyNetworkHealth.diagnostic)
-        appendLine("底层网络 DNS 数量: " + ProxyDnsStatus.underlyingCount +
-            if (ProxyDnsStatus.underlyingCount == 0) " (VPN 可能无法解析域名)" else "")
         appendLine("Google / YouTube API 已配置: " + if (store.hasYouTubeAuth) "是" else "否")
         appendLine("YouTube API 凭据实测: " + credentialProbeResult)
         appendLine("家长白名单频道数: " + store.allowedChannels.size)

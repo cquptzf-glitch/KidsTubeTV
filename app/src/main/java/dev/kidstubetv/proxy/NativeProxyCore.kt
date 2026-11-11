@@ -1,8 +1,8 @@
 package dev.kidstubetv.proxy
 
 /**
- * Android-specific native core boundary, implemented once for each build
- * backend. Both Go bridges transfer ownership of the established TUN fd.
+ * Boundary for the single libmihomo-android JNI backend.
+ * The established TUN fd is transferred to the native core.
  */
 internal interface NativeProxyCore {
     val tunAddress: String
@@ -18,8 +18,6 @@ internal interface NativeProxyCore {
     /** Return false if the core rejects the TUN descriptor. */
     fun startTun(fd: Int, callbacks: NativeTunCallbacks): Boolean
     fun stopTun()
-    /** Feed underlying Wi-Fi/Ethernet DNS to FlClash's Android "system" resolver. */
-    fun updateSystemDns(servers: List<String>) {}
 }
 
 internal interface ProxyControlBackend {

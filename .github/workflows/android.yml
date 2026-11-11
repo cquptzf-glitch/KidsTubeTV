@@ -15,8 +15,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      # GitHub ubuntu-latest has pre-installed Android SDK. Avoid setup-android v3
-      # which tries installing deprecated 'tools' and fails on newer SDK repos.
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
@@ -25,25 +23,20 @@ jobs:
           SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
           "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
-      - name: Static syntax check for core build scripts
-        run: bash -n scripts/fetch-mihomo.sh scripts/build-official-flclash-core.sh
-      - name: Download and verify pinned Mihomo AAR
+      - name: Static syntax check
+        run: bash -n scripts/fetch-mihomo.sh
+      - name: Download and verify pinned libmihomo AAR
         run: bash scripts/fetch-mihomo.sh
       - name: Lint, test and compile
         run: gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
-      - name: Verify APK minimum SDK and list native ABIs
+      - name: Verify APK SDK and ABI
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$APK"
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
           "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/aapt" dump badging "$APK" | grep -E "^(package:|sdkVersion:|targetSdkVersion:)"
-          echo "Bundled native libraries:"
           unzip -Z -1 "$APK" | grep '^lib/' | sort | head -60 || true
           for ABI in armeabi-v7a arm64-v8a; do
-            if unzip -Z -1 "$APK" | grep -q "^lib/$ABI/"; then
-              echo "Present: $ABI"
-            else
-              echo "::warning::No bundled native libraries for $ABI; verify target TV ABI before installing"
-            fi
+            unzip -Z -1 "$APK" | grep -q "^lib/$ABI/" || echo "::warning::Missing $ABI native library"
           done
       - name: Upload Android lint report
         if: always()

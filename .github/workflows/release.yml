@@ -1,14 +1,14 @@
-name: Signed official FlClash release
+name: Signed KidsTubeTV release (libmihomo-android)
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 permissions:
   contents: write
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 110
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -18,57 +18,65 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.0'
-          cache: false
-      - name: Install Android SDK 36
+      - name: Install Android SDK platform
         run: |
           M="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$M" --licenses >/dev/null || true
-          "$M" --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
-      - name: Build pinned official FlClash Go core
-        env:
-          FLCLASH_TAG: v0.9.3
-          NDK_VERSION: 28.2.13676358
-        run: |
-          bash -n scripts/build-official-flclash-core.sh
-          bash scripts/build-official-flclash-core.sh
-          mkdir -p app/libs
-          cp dist/flclash-core/flclash-core-v0.9.3.aar app/libs/
-      - name: Load Android signing key
+          "$M" --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Download and verify pinned libmihomo AAR
+        run: bash scripts/fetch-mihomo.sh
+      - name: Load private production signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KIDSTUBE_KEYSTORE_BASE64 }}
           KIDSTUBE_STORE_PASSWORD: ${{ secrets.KIDSTUBE_STORE_PASSWORD }}
           KIDSTUBE_KEY_ALIAS: ${{ secrets.KIDSTUBE_KEY_ALIAS }}
           KIDSTUBE_KEY_PASSWORD: ${{ secrets.KIDSTUBE_KEY_PASSWORD }}
         run: |
-          test -n "$KEYSTORE_BASE64" || { echo "::error::Missing KIDSTUBE_KEYSTORE_BASE64"; exit 1; }
-          test -n "$KIDSTUBE_STORE_PASSWORD" || { echo "::error::Missing KIDSTUBE_STORE_PASSWORD"; exit 1; }
-          test -n "$KIDSTUBE_KEY_ALIAS" || { echo "::error::Missing KIDSTUBE_KEY_ALIAS"; exit 1; }
-          test -n "$KIDSTUBE_KEY_PASSWORD" || { echo "::error::Missing KIDSTUBE_KEY_PASSWORD"; exit 1; }
+          test -n "$KEYSTORE_BASE64" || exit 1
+          test -n "$KIDSTUBE_STORE_PASSWORD" || exit 1
+          test -n "$KIDSTUBE_KEY_ALIAS" || exit 1
+          test -n "$KIDSTUBE_KEY_PASSWORD" || exit 1
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kidstubetv-signing.jks"
           chmod 600 "$RUNNER_TEMP/kidstubetv-signing.jks"
           echo "KIDSTUBE_KEYSTORE_FILE=$RUNNER_TEMP/kidstubetv-signing.jks" >> "$GITHUB_ENV"
           echo "KIDSTUBE_STORE_PASSWORD=$KIDSTUBE_STORE_PASSWORD" >> "$GITHUB_ENV"
           echo "KIDSTUBE_KEY_ALIAS=$KIDSTUBE_KEY_ALIAS" >> "$GITHUB_ENV"
           echo "KIDSTUBE_KEY_PASSWORD=$KIDSTUBE_KEY_PASSWORD" >> "$GITHUB_ENV"
-      - name: Run tests and build signed APK
+      - name: Test and assemble signed release
         env:
           KIDSTUBE_VERSION_NAME: ${{ github.ref_name }}
           KIDSTUBE_VERSION_CODE: ${{ github.run_number }}
+        run: gradle --no-daemon :app:lintRelease :app:testReleaseUnitTest :app:assembleRelease
+      - name: Verify signed Release, ABIs and SHA256
+        shell: bash
         run: |
-          gradle --no-daemon -PkidsTubeOfficialCore=true :app:lintRelease :app:testReleaseUnitTest :app:assembleRelease
-          "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+          set -euo pipefail
+          BT="${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/36.0.0"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$BT/apksigner" verify --min-sdk-version 28 --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/signature.txt"
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/signature.txt"
+          "$BT/aapt" dump badging "$APK" > "$RUNNER_TEMP/apk-badging.txt"
+          grep -Fq "package: name='dev.kidstubetv'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -Fq "sdkVersion:'28'" "$RUNNER_TEMP/apk-badging.txt"
+          unzip -Z -1 "$APK" > "$RUNNER_TEMP/apk-files.txt"
+          for ABI in armeabi-v7a arm64-v8a; do
+            grep -q "^lib/$ABI/" "$RUNNER_TEMP/apk-files.txt"
+          done
+          "$BT/zipalign" -c -v 4 "$APK" >/dev/null
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/KidsTubeTV-${GITHUB_REF_NAME}-FlClash-android9.apk"
-          cp dist/flclash-core/SOURCE-INFO.txt dist/FLCLASH-SOURCE-INFO.txt
-          cp dist/flclash-core/FlClash-LICENSE dist/FlClash-LICENSE
-          cd dist
-          sha256sum *.apk > SHA256SUMS.txt
+          cp "$APK" "dist/KidsTubeTV-${GITHUB_REF_NAME}-libmihomo-android9.apk"
+          cat > dist/LIBMIHOMO-SOURCE-INFO.txt <<'INFO'
+          Upstream: https://github.com/oviron/libmihomo-android
+          Artifact: libmihomo-android-v0.3.13.aar
+          Version: v0.3.13
+          SHA-256: c6c2787e5dd888a8f9193501506dfa3a4f8a38fbd51adefccf67d84d0c8e0fb5
+          License: GPL-3.0 (review upstream dependencies before redistribution)
+          INFO
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: KidsTubeTV-FlClash-signed-release
+          name: KidsTubeTV-libmihomo-signed-release
           path: dist/*
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -78,5 +86,4 @@ jobs:
           files: |
             dist/*.apk
             dist/SHA256SUMS.txt
-            dist/FLCLASH-SOURCE-INFO.txt
-            dist/FlClash-LICENSE
+            dist/LIBMIHOMO-SOURCE-INFO.txt
