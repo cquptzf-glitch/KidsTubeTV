@@ -58,3 +58,12 @@ KidsTubeTV 不包含作者托管的共享 Google OAuth 客户端，不会直接�
 Google TV OAuth 凭据和令牌受进程内 `GoogleAuthSessionEpoch` 管理。用户主动登出、修改客户端或完成新的设备码授权都会变更版本，之前进行中的设备码请求、令牌刷新与订阅拉取不能再把旧登录状态写回。Android 进程重新启动会销毁所有旧后台线程并重新加载加密保存的凭据。
 
 家长切换 API Key 即使仍保持“已配置”状态，也会通知儿童首页重新拉取当前元数据，避免继续复用旧账号状态。家长诊断页新增一次真实 YouTube Data API 请求，能反馈无效 API Key、403、quota、DNS、超时等类别；这**不等于**完整登录/播放通过。不要从开发者以外的第三方复制 SmartTube 的 OAuth 客户端密钥来替代自己的合法配置。
+
+## Google OAuth 网络请求加固（2026-11-11）
+
+- 设备码申请、设备码轮询、refresh token 刷新与订阅频道读取共用可注入的 `GoogleOAuthHttpClient`，避免不同入口产生不一致的网络行为。
+- OAuth POST 只允许 `https://oauth2.googleapis.com/device/code` 和 `https://oauth2.googleapis.com/token`；读取订阅只允许 Google 官方 `/youtube/v3/subscriptions` HTTPS 地址，拒绝 URL 中的用户信息、非标准端口和外部主机。
+- 显式关闭 HTTP 自动重定向，收到 3xx 就停止，避免授权头或客户端密钥被转发到重定向目标；JSON 正文最多读取 512 KiB，非法 JSON 的错误信息不回显服务端原文。
+- 每次打开请求前检查 app 专用 VPN；POST 发送前、响应读取前再次检查当前 VPN 状态。该检查只能缩小竞态窗口，**不能替代 Android 系统级 VPN 防泄漏检查**。
+- 新增纯 JVM 模拟连接测试，覆盖非法官方 URL、VPN 撤销、禁止重定向、响应体上限、异常数据脱敏和 OAuth 表单编码。
+- 尚未实际验证 Google 设备授权、刷新令牌及 TV 端 API 联机行为；只有 CI 通过也不能宣称登录功能已在设备上正常工作。
