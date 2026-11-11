@@ -20,11 +20,18 @@
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
 - **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建使用固定 `libmihomo-android` 的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
+## 本轮可靠性修复（2026-11-11）
+
+- **订阅更新并发保护：** 增加 `SubscriptionProfileRevision` 版本门控。更换订阅 URL、从 U 盘导入 YAML、恢复备份和成功更新都会让较旧的下载结果失效；URL 校验、配置安装、节点选择清理和更新时间写入在同一配置锁内进行。失败不会覆盖已有配置或暴露 token。
+- **YouTube API 传输加固：** 请求只能访问固定的 YouTube Data API 路径，查询参数编码后发送，凭据只通过请求头传输。拒绝 HTTP 跳转，分别限制成功响应（2 MiB）和错误响应（32 KiB），限制异常信息并在联网前再次检查 VPN 状态。
+- **回归测试：** 新增订阅版本失效、失败重试、API Key/OAuth 请求头、VPN 中途撤销、拒绝跳转、响应上限及错误脱敏测试；以本提交对应的 Actions CI 结果为准。
+- **限制：** 上述为源码和自动化验证范围，真实 Android 9 TV 的 TUN、Google OAuth 及 IFrame 仍需要独立设备验收。
+
 ## 最近完善（2026-11-06）
 
 - **首页多频道推荐：** 合并家长批准的最多 5 个频道及独立批准的视频，轮流混排，每条内容仍经过儿童标记、可嵌入与白名单验证。
 - **搜索配额优化：** 同一关键词的 YouTube 搜索 ID 最多缓存 10 分钟，最多保留 48 组结果；每次浏览仍重新查询和校验视频元数据，不缓存儿童审核结论。
-- **订阅更新安全：** 手动更新、后台自动更新和本地 YAML 导入互斥；新订阅地址仅在配置下载成功后保存，避免旧配置与新 URL 不一致；支持家长在高级设置恢复上一份 YAML。
+- **订阅更新安全：** 手动更新、后台自动更新和本地 YAML 导入互斥，下载结果有版本门控；家长保存新订阅 URL 后会立即加密记录地址，但只有通过验证的 YAML 才会替换当前配置，失败时保留旧配置；支持恢复上一份 YAML。
 - **诊断：** 家长中心 → 网络代理 → 高级设置 → 设备与网络诊断，显示 Android API、CPU ABI、WebView 和 VPN 状态，可复制不含订阅令牌的报告。
 - **播放恢复：** 后台切换时中断的视频审核在返回后重新请求，防止黑屏；仍需真实 Android TV 端到端测试。
 - **CI：** 增加 Android Lint、单元测试、Debug APK 构建、原生 ABI 清单检查，并上传 HTML Lint 报告。
@@ -59,6 +66,7 @@
 - [架构、生命周期及安全边界](docs/ARCHITECTURE.md)
 - [Google 电视 OAuth 授权](docs/GOOGLE_LOGIN.md)
 - [CI/CD、签名配置和版本发布](docs/CI_CD.md)
+- [Clash 订阅更新与错误排查](docs/SUBSCRIPTION_TROUBLESHOOTING.md)
 - [Android 9 电视验收清单](docs/TV_TEST_PLAN.md)
 - [遥控器与家长网络 UI 设计](docs/TV_UI_REVIEW.md)
 

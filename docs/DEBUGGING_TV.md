@@ -45,6 +45,10 @@ adb logcat -s AndroidRuntime chromium
 
 若仅有某个 `generate_204` 检测网址失败，不能直接推断 Google OAuth 与 YouTube API 也不可用；需要分别诊断 DNS/TLS、API 凭据和视频嵌入问题。
 
+## YouTube Data API 安全读取（2026-11-11）
+
+Data API 的成功 JSON 最多读取 2 MiB，错误响应最多读取 32 KiB。遇到“响应超过安全限制”说明服务端内容异常或超过客户端安全容量；不应尝试关闭限制或复制含令牌的错误响应。HTTP 重定向会被拒绝，避免将 API Key/OAuth 令牌转发到其它站点。网络请求前会复查 VPN READY，但这仍不能替代 Android 设备级的无泄漏测试。
+
 ## beta.6 真实凭据诊断（家长操作）
 
 新版本“家长中心 → 网络与 VPN → 网络故障诊断”提供 **检查 YouTube API Key / OAuth 凭据（真实接口）**。流程：

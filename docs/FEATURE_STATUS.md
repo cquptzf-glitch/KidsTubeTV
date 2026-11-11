@@ -21,6 +21,13 @@
 | VPN 启停、故障提示、探测 | `KidsVpnService`、`VpnSessionGate`、`ProxyNetworkHealth` | TUN/DNS/IPv6 必须真机验证 |
 | 签名安装与 APK 构建 | `android.yml`、`preview-release.yml`、`release.yml` | CI 与设备安装仍须检查 |
 
+## 2026-11-11 后续开发：并发与 API 传输加固
+
+- **订阅更新提交：** `SubscriptionProfileRevision` + `SettingsStore.installFetchedSubscription` 将旧请求结果隔离。家长切换 URL、导入本地文件和恢复备份后，过期响应不会覆盖现有 YAML；成功更新使同一版本的其它结果失效。失败错误仅在原 URL 和配置版本仍有效时记录。
+- **自动更新：** `SubscriptionUpdater` 下载完成后复查 VPN READY 和 URL/版本，符合条件才安装；不会直接热替换运行中的原生核心。
+- **YouTube API：** `GoogleYouTubeHttpTransport` 固定 Google HTTPS 主机及允许的 Data API 路径，不跟随重定向、请求头携带凭据、请求前复查 VPN；成功/错误 JSON 读取量分别限制为 2 MiB / 32 KiB。仅解析已知错误码。
+- **新增 JVM 测试：** `SubscriptionProfileRevisionTest`、`GoogleYouTubeHttpTransportTest`。必须以本次 commit 的真实 CI 结果确认编译、Lint 和单测状态；尚未运行真机。
+
 ## 当前风险与开发优先级
 
 1. **P0：** Android 9 电视上的端到端 VPN、真实节点连通、DNS/IPv6、系统 VPN 回收以及 `protect(fd)` 失败语义。

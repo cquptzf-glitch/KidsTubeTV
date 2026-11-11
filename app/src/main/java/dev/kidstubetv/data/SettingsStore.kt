@@ -14,6 +14,7 @@ class SettingsStore(context: Context) {
         // Serializes writes across *different* SettingsStore instances used by
         // automatic and manual subscription updates in the same process.
         private val PROFILE_LOCK = Any()
+        private val PROFILE_VERSION = SubscriptionProfileRevision()
     }
     private val appContext = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences("kids_config_v1", Context.MODE_PRIVATE)
@@ -41,7 +42,15 @@ class SettingsStore(context: Context) {
 
     var subscriptionUrl: String
         get() = secrets.get("clash_subscription")
-        set(v) { secrets.put("clash_subscription", if (v.isBlank()) "" else SubscriptionFormat.normalizeUrl(v)) }
+        set(v) = synchronized(PROFILE_LOCK) {
+            val normalized = if (v.isBlank()) "" else SubscriptionFormat.normalizeUrl(v)
+            if (subscriptionUrl != normalized) {
+                secrets.put("clash_subscription", normalized)
+                // A late network response from the old provider must not replace
+                // the locally selected profile (even if the URL later changes back).
+                PROFILE_VERSION.invalidate()
+            }
+        }
 
     var channelsText: String
         get() = prefs.getString("channels", "") ?: ""
@@ -239,13 +248,57 @@ class SettingsStore(context: Context) {
         return result
     }
 
+    /** Capture before network I/O. URL changes and local imports invalidate it. */
+    fun subscriptionRevision(): Long = synchronized(PROFILE_LOCK) {
+        PROFILE_VERSION.snapshot()
+    }
+
+    /**
+     * Install only the still-selected provider's response from the same
+     * configuration generation. This check and file replacement share one lock
+     * with URL edits, local imports, and backup restore.
+     */
+    fun installFetchedSubscription(
+        expectedUrl: String,
+        expectedRevision: Long,
+        content: String,
+        clearSelections: Boolean = false
+    ): Boolean = synchronized(PROFILE_LOCK) {
+        if (subscriptionUrl != expectedUrl) return@synchronized false
+        PROFILE_VERSION.installIfCurrent(expectedRevision) {
+            SubscriptionFormat.validateYaml(content)
+            ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
+            if (clearSelections) prefs.edit().remove("proxy_selections").apply()
+            subscriptionUpdatedAt = System.currentTimeMillis()
+        }
+    }
+
+    /** Do not display an outdated HTTP failure after changing subscriptions. */
+    fun recordSubscriptionFailureIfCurrent(
+        expectedUrl: String, expectedRevision: Long, cause: Throwable, vpnReady: Boolean
+    ): Boolean = synchronized(PROFILE_LOCK) {
+        if (subscriptionUrl != expectedUrl ||
+            !PROFILE_VERSION.isCurrent(expectedRevision)) return@synchronized false
+        recordSubscriptionFailure(cause, vpnReady)
+        true
+    }
+
+    /** Local import and restore also invalidate any in-flight downloaded YAML. */
     fun writeProfile(content: String) = synchronized(PROFILE_LOCK) {
         SubscriptionFormat.validateYaml(content)
-        ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
+        try {
+            ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
+        } finally {
+            PROFILE_VERSION.invalidate()
+        }
     }
 
     fun restoreBackup(): Boolean = synchronized(PROFILE_LOCK) {
-        ProfileFileStore(profileFile).restore()
+        try {
+            ProfileFileStore(profileFile).restore()
+        } finally {
+            PROFILE_VERSION.invalidate()
+        }
     }
 
     private fun tokenize(v: String) = v.split(Regex("[,;\\s]+")).map(String::trim).filter(String::isNotBlank)

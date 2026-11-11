@@ -17,6 +17,10 @@ gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 
 [android.yml](../.github/workflows/android.yml) 在 main 推送、PR、手动运行时使用 JDK 17、Gradle 8.13、Android SDK 36，下载 AAR，运行 Lint、单元测试、Debug APK 构建并上传制品。Runner 使用的临时 Debug 签名证书可能发生变化。
 
+## 静态与回归检查
+
+每次提交必须完成 `lintDebug`、`testDebugUnitTest`、`assembleDebug`。订阅状态回归测试覆盖 URL/本地导入的版本失效及失败恢复；YouTube HTTP 测试覆盖凭据请求头、允许路径、重定向、响应字节上限和安全错误提示。CI 不调用真实的 Google 账户或服务商订阅。
+
 ## 预览版：在 main 手动触发
 
 [preview-release.yml](../.github/workflows/preview-release.yml) 由 `workflow_dispatch` 手动触发，仅允许 main。填写未使用的预览版本（默认 `0.3.0-beta.10`）、递增 versionCode 及包名后缀。下载相同 AAR，运行 Lint/单测/签名 Debug APK 构建，检查 `apksigner` v2、Android 9、ARM ABI、ZIP 对齐和 SHA-256，最后发布 Pre-release。

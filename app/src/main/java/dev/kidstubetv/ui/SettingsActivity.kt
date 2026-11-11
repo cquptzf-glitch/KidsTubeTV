@@ -841,19 +841,19 @@ class SettingsActivity : Activity() {
         networkState.text = "◌ 正在下载并校验 Clash 订阅…"
         networkDetail.text = "下载失败不会覆盖原有配置"
         val vpnReadyAtStart = ProxyStatus.phase == ProxyStatus.Phase.READY
+        val subscriptionRevision = store.subscriptionRevision()
         Thread({
             val result = try {
                 runCatching {
                     val yaml = SubscriptionClient().fetch(url)
-                    check(store.subscriptionUrl == url) { "订阅地址已变更，本次结果已作废" }
-                    store.writeProfile(yaml)
-                    if (providerChanged) store.clearProxySelections()
-                    store.subscriptionUpdatedAt = System.currentTimeMillis()
+                    check(store.installFetchedSubscription(
+                        url, subscriptionRevision, yaml, clearSelections = providerChanged
+                    )) { "订阅已被新的配置替换，本次下载结果已作废" }
                 }.onFailure { failure ->
-                    // Do not stamp an old request's error over a newer URL.
-                    if (store.subscriptionUrl == url) {
-                        store.recordSubscriptionFailure(failure, vpnReadyAtStart)
-                    }
+                    // Never stamp an old request's error over a newer profile.
+                    store.recordSubscriptionFailureIfCurrent(
+                        url, subscriptionRevision, failure, vpnReadyAtStart
+                    )
                 }
             } finally {
                 dev.kidstubetv.proxy.SubscriptionUpdateGate.release()

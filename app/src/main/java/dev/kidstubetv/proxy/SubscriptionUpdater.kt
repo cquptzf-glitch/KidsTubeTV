@@ -3,15 +3,13 @@ package dev.kidstubetv.proxy
 import android.content.Context
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Auto-update runs while the app-scoped VPN is already online, so the token-bearing
- * subscription request uses KidsTubeTV's selected VPN network.
- * New config is loaded on next VPN start; never hot-replace an active core.
+ * Auto-refresh uses the existing app-scoped VPN. File commits are conditional
+ * on the original provider URL and profile revision, so late downloads cannot
+ * replace a newly imported or edited subscription.
  */
 object SubscriptionUpdater {
-    // Shared with the manual TV settings updater.
     private val busy = SubscriptionUpdateGate
 
     fun updateIfDue(context: Context) {
@@ -25,19 +23,21 @@ object SubscriptionUpdater {
                 val current = SettingsStore(app)
                 if (!current.autoRefreshDue || ProxyStatus.phase != ProxyStatus.Phase.READY) return@Thread
                 val url = current.subscriptionUrl
-                val yaml = SubscriptionClient().fetch(url)
-                // A delayed response must not replace the profile after the VPN
-                // stopped or the parent switched to another subscription.
-                if (ProxyStatus.phase != ProxyStatus.Phase.READY ||
-                    current.subscriptionUrl != url) return@Thread
-                // Core already parsed config.yaml. New profile loads next session.
-                current.writeProfile(yaml)
-                current.subscriptionUpdatedAt = System.currentTimeMillis()
-            } catch (failure: Exception) {
-                // Store only a sanitized category; the URL may contain a token.
-                SettingsStore(app).recordSubscriptionFailure(
-                    failure, ProxyStatus.phase == ProxyStatus.Phase.READY
-                )
+                val revision = current.subscriptionRevision()
+                try {
+                    val yaml = SubscriptionClient().fetch(url)
+                    if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+                        // No hot-reload: core reads the new YAML on the next start.
+                        current.installFetchedSubscription(url, revision, yaml)
+                    }
+                } catch (failure: Exception) {
+                    // Stale responses must never overwrite the next provider's
+                    // status with an error from the previous provider.
+                    current.recordSubscriptionFailureIfCurrent(
+                        url, revision, failure,
+                        ProxyStatus.phase == ProxyStatus.Phase.READY
+                    )
+                }
             } finally {
                 busy.release()
             }
