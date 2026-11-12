@@ -22,7 +22,9 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.SettingsActivity" android:exported="false"/>
-        <activity android:name=".ui.SubscriptionEditorActivity" android:exported="false"/>
+        <activity android:name=".ui.SubscriptionEditorActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"/>
         <activity android:name=".ui.GoogleAccountActivity" android:exported="false"/>
         <activity android:name=".ui.DiagnosticsActivity" android:exported="false"/>
         <activity android:name=".ui.ProxyActivity" android:exported="false"/>

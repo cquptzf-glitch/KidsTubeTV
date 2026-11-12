@@ -67,3 +67,11 @@ Google TV OAuth 凭据和令牌受进程内 `GoogleAuthSessionEpoch` 管理。�
 - 每次打开请求前检查 app 专用 VPN；POST 发送前、响应读取前再次检查当前 VPN 状态。该检查只能缩小竞态窗口，**不能替代 Android 系统级 VPN 防泄漏检查**。
 - 新增纯 JVM 模拟连接测试，覆盖非法官方 URL、VPN 撤销、禁止重定向、响应体上限、异常数据脱敏和 OAuth 表单编码。
 - 尚未实际验证 Google 设备授权、刷新令牌及 TV 端 API 联机行为；只有 CI 通过也不能宣称登录功能已在设备上正常工作。
+
+## 双端登录界面（2026-11-12）
+
+- 手机：单列返回栏、获取验证码主操作、读取已订阅频道；TV：居中大卡片与 Google 官方二维码，遥控器可通过 OK 操作。
+- 自己的 Google Cloud **TVs and Limited Input devices** OAuth Client ID / Client Secret 在可折叠区配置，已保存的 Secret 不回显；本机 PIN 页面和 Google 授权页采用截图保护。
+- 只有本次设备码确实使授权状态更新且产生可用账号链接时才显示“授权成功”；过期/中断/取消不视为成功。
+- 注意：外部手机浏览器不经过 KidsTubeTV 的应用级 VPN，且 Android 通常不支持同时使用两款 VPN。真实账号授权仍需要设备测试。
+

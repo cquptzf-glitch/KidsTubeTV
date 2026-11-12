@@ -11,7 +11,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.text.InputType
 import android.widget.EditText
-import android.widget.ScrollView
+import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.ImageView
@@ -78,71 +78,91 @@ class GoogleAccountActivity : Activity() {
             finish()
             return
         }
-        val scrolling = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
-        val layout = TvUi.column(this)
-        scrolling.addView(layout)
-        setContentView(scrolling)
-        layout.addView(TvUi.label(this, "Google / YouTube 授权",
-            if (UiDevice.isHandheld(this)) 24f else 29f, true))
-        layout.addView(TvUi.label(this,
-            "家长用手机完成授权。只有家长之后勾选的频道才会加入儿童白名单。", 17f))
-        status = TvUi.label(this,
-            when {
-                auth.isLinked -> "✓ Google 已授权，可以导入 YouTube 订阅"
-                !auth.isConfigured -> "需要先配置自己的 Google TV OAuth 客户端"
-                else -> "客户端已配置，选择“手机扫码授权”即可"
-            }, 18f)
-        layout.addView(status)
-        TvUi.space(layout, this, 12)
+        // This page contains OAuth client credentials and a device code.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        val phone = UiDevice.isHandheld(this)
+        val page = SettingsDetailPage(
+            this,
+            "Google / YouTube",
+            "仅家长使用。用手机或电脑在 Google 官方网站完成设备码授权，随后选择可观看的频道。"
+        )
+        val layout = page.body
+        status = page.status(when {
+            auth.isLinked -> "✓ Google 已授权，可以选择订阅频道"
+            !auth.isConfigured -> "需要先配置自己的 Google TV OAuth 客户端"
+            else -> "客户端已配置，可以获取新的 Google 验证码"
+        })
 
-        layout.addView(TvUi.primaryButton(this,
-            if (UiDevice.isHandheld(this)) "获取 Google 验证码" else "手机扫码授权 Google") {
+        val primary = page.action(
+            if (phone) "获取 Google 验证码" else "手机扫码登录 Google",
+            "仅申请 YouTube 只读权限；不会同步个人播放记录",
+            primary = true
+        ) {
             if (!auth.isConfigured || credentialsPane.visibility == View.VISIBLE) {
                 if (saveCredentials()) {
                     credentialsPane.visibility = View.GONE
                     startAuth()
                 }
             } else startAuth()
-        })
-        TvUi.space(layout, this, 9)
-        layout.addView(TvUi.button(this, "导入 Google 已订阅的频道") { chooseSubscriptions() })
-        layout.addView(TvUi.button(this, "配置 / 更换 Google TV OAuth 客户端") {
-            credentialsPane.visibility =
-                if (credentialsPane.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        })
-        TvUi.space(layout, this, 9)
+        }
+        page.action(
+            "导入已订阅的 YouTube 频道",
+            "授权完成后勾选需要给孩子看的频道，不会自动全部添加"
+        ) { chooseSubscriptions() }
 
+        val credentialsToggle = page.action(
+            "OAuth 客户端配置  ▾",
+            "首次使用需要 Google Cloud TV 客户端，日常无需更改"
+        ) {
+            val open = credentialsPane.visibility != View.VISIBLE
+            credentialsPane.visibility = if (open) View.VISIBLE else View.GONE
+        }
         credentialsPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = if (auth.isConfigured) View.GONE else View.VISIBLE
-            setPadding(TvUi.dp(this@GoogleAccountActivity, 16), TvUi.dp(this@GoogleAccountActivity, 10),
-                TvUi.dp(this@GoogleAccountActivity, 16), TvUi.dp(this@GoogleAccountActivity, 10))
-            setBackgroundColor(TvUi.surface)
+            val pad = TvUi.dp(this@GoogleAccountActivity, if (phone) 12 else 20)
+            setPadding(pad, pad, pad, pad)
+            background = SettingsDecor.statusShape(this@GoogleAccountActivity)
+        }
+        credentialsToggle.setOnClickListener {
+            val open = credentialsPane.visibility != View.VISIBLE
+            credentialsPane.visibility = if (open) View.VISIBLE else View.GONE
+            credentialsToggle.setTitle("OAuth 客户端配置  " + if (open) "▴" else "▾")
         }
         layout.addView(credentialsPane)
         credentialsPane.addView(TvUi.label(this,
-            "首次使用：在 Google Cloud 开启 YouTube Data API v3，并创建“TVs and Limited Input devices”类型的 OAuth 客户端。", 16f))
+            "在 Google Cloud 启用 YouTube Data API v3，创建“TVs and Limited Input devices”类型的客户端。",
+            if (phone) 14f else 17f))
         credentialsPane.addView(TvUi.label(this,
-            "KidsTubeTV 不内置通用 Google 登录凭据；请在手机上准备好 Client ID 和 Client Secret。", 15f))
-        credentialsPane.addView(TvUi.label(this, "OAuth Client ID", 18f))
+            "不会显示已保存的 Client Secret；如需更换，请重新输入。",
+            if (phone) 13f else 15f).apply { setTextColor(TvUi.muted) })
+        credentialsPane.addView(TvUi.label(this, "OAuth Client ID", if (phone) 15f else 18f))
         clientId = TvUi.input(this, "xxx.apps.googleusercontent.com", auth.clientId)
-        credentialsPane.addView(clientId)
-        credentialsPane.addView(TvUi.label(this, "OAuth Client Secret", 18f))
+        credentialsPane.addView(clientId, LinearLayout.LayoutParams(-1, -2))
+        credentialsPane.addView(TvUi.label(this, "OAuth Client Secret", if (phone) 15f else 18f))
         clientSecret = TvUi.input(this, if (auth.clientSecret.isNotEmpty())
-            "已保存，留空表示不修改" else "输入 Google TV Client Secret", "").apply {
+            "已保存；留空表示不修改" else "输入 Google TV Client Secret", "").apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        credentialsPane.addView(clientSecret)
-        credentialsPane.addView(TvUi.button(this, "保存客户端配置") {
-            if (saveCredentials()) credentialsPane.visibility = View.GONE
-        })
+        credentialsPane.addView(clientSecret, LinearLayout.LayoutParams(-1, -2))
+        TvUi.space(credentialsPane, this, 9)
+        credentialsPane.addView(TvUi.primaryButton(this, "保存客户端配置") {
+            if (saveCredentials()) {
+                credentialsPane.visibility = View.GONE
+                credentialsToggle.setTitle("OAuth 客户端配置  ▾")
+            }
+        }, LinearLayout.LayoutParams(-1, TvUi.dp(this, if (phone) 52 else 66)))
 
-        TvUi.space(layout, this, 14)
-        layout.addView(TvUi.button(this, "清除本机 Google 授权") {
+        page.divider()
+        page.action(
+            "退出本机 Google 账号",
+            "仅删除本机令牌，已配置的 Google Cloud 客户端仍保留"
+        ) {
             AlertDialog.Builder(this)
-                .setMessage("只删除本机 Google 登录令牌，Google Cloud 客户端配置会保留。")
+                .setTitle("退出 Google 授权？")
+                .setMessage("删除本机授权令牌，但不删除已经批准给孩子的频道。")
                 .setNegativeButton("取消", null)
-                .setPositiveButton("退出") { _, _ ->
+                .setPositiveButton("退出授权") { _, _ ->
                     cancel?.set(true)
                     challengeDialog?.dismiss()
                     challengeDialog = null
@@ -150,8 +170,8 @@ class GoogleAccountActivity : Activity() {
                     auth.logoutLocal()
                     status.text = "已退出本机 Google 账号"
                 }.show()
-        })
-        layout.addView(TvUi.button(this, "返回家长设置 / 网络与 VPN") { finish() })
+        }
+        page.focusPrimary(primary)
     }
 
     private fun saveCredentials(): Boolean = runCatching {
@@ -170,7 +190,7 @@ class GoogleAccountActivity : Activity() {
     }.fold({
         true
     }, {
-        status.text = "保存失败：" + (it.message ?: "请检查 Client ID / Secret")
+        status.text = "保存失败：请检查 Client ID / Secret 和系统安全存储"
         false
     })
 
@@ -199,14 +219,24 @@ class GoogleAccountActivity : Activity() {
                             status.text = progress
                     }
                 }
+                // The device-code poller can return early without authorization.
+                // Checking the session revision also distinguishes a previous
+                // linked account from the current new authorization.
+                auth.isLinked && auth.authRevision != challenge.issuedSession
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed || cancelled.get() || cancel !== cancelled)
                     return@runOnUiThread
                 result.onFailure { e ->
-                    status.text = "Google 登录失败：" + (e.message ?: "请检查网络与客户端")
-                }.onSuccess {
-                    status.text = "✓ Google 授权成功，现在可以导入订阅频道"
+                    status.text = "Google 登录失败：" +
+                        (e.message?.takeIf { it.length <= 160 && !it.contains("http") }
+                            ?: "请检查网络和客户端配置")
+                }.onSuccess { freshAuthorization ->
+                    status.text = if (freshAuthorization) {
+                        "✓ Google 授权成功，可以选择订阅频道"
+                    } else {
+                        "授权未完成或已失效，请重新获取验证码"
+                    }
                     challengeDialog?.setOnDismissListener(null)
                     challengeDialog?.dismiss()
                     challengeDialog = null

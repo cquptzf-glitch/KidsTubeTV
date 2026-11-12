@@ -94,6 +94,7 @@ class SettingsActivity : Activity() {
     private lateinit var autoplayTile: SettingsActionTile
     private lateinit var vpnTile: SettingsActionTile
     private val uiHandler = Handler(Looper.getMainLooper())
+    private var screenStarted = false
     private val startVpnAfterStop = Runnable {
         if (!isFinishing && !isDestroyed && ParentSession.authorized()) requestVpnFromParent()
     }
@@ -230,6 +231,7 @@ class SettingsActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        screenStarted = true
         val filter = IntentFilter(ProxyStatus.ACTION_CHANGED).apply {
             addAction(ProxyNetworkHealth.ACTION_CHANGED)
         }
@@ -251,6 +253,7 @@ class SettingsActivity : Activity() {
     }
 
     override fun onStop() {
+        screenStarted = false
         unregisterReceiver(statusReceiver)
         uiHandler.removeCallbacks(startVpnAfterStop)
         super.onStop()
@@ -869,6 +872,9 @@ class SettingsActivity : Activity() {
                 if (isFinishing || isDestroyed ||
                     store.subscriptionUrl != url) return@runOnUiThread
                 refreshSummaries()
+                // The background download may finish after the parent left
+                // Settings. Never launch a VPN consent dialog over another app.
+                if (!screenStarted || !ParentSession.authorized()) return@runOnUiThread
                 result.onSuccess {
                     networkState.text = "✓ 订阅下载并校验成功"
                     networkDetail.text = "配置已保存，可在下次连接 VPN 时生效"

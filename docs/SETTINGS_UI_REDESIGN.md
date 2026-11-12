@@ -146,3 +146,30 @@
 - 无新增局域网 HTTP 上传、二维码输入桥、远程配置 API；避免将带 token 订阅广播到同网段。
 - TV 系统软键盘与各厂商方向键行为、WebView 及 Google OAuth 仍需要 Android 9 雷鸟电视和真实手机测试。
 - 当前设计直接使用 Android Views，后续若增加多级维护页面可把 \`SettingsActionTile\` 等抽成复用 View，不应强制在当前阶段切换 Compose。
+
+## 10. 第二阶段实现：子页统一与请求生命周期（2026-11-12）
+
+第一阶段重构完成后，本轮继续改造三个原来布局和行为分散的子页面：
+
+| 界面 | UI 改造 | 业务与状态安全 |
+| --- | --- | --- |
+| Google TV 登录 | 统一固定返回栏、状态卡、授权与频道导入卡片；OAuth 客户端配置折叠，TV / 手机尺寸不同 | Client ID / Secret 仍使用 `GoogleTvAuth` 的安全存储；页面禁截屏，已保存 Secret 不展示；轮询仅在本次设备码导致的新授权生效后才报告成功 |
+| 代理节点 | 默认策略说明、刷新、可选 Selector 组卡片；流量/测速默认折叠 | 查询、切换和测速回调通过 `LatestResultGate` 防止旧结果覆盖；离开再返回会重新查询 |
+| 网络诊断 | 统一状态卡和「开始一键检测」主按钮；单项 HTTPS、凭据检测、脱敏报告折叠 | 离开页面使异步探测失效并复位正在检测标志，不会以旧请求覆盖新页结果 |
+
+统一布局实现文件：`ui/SettingsDetailPage.kt`，负责：
+- 手机全宽滚动布局、紧凑返回栏与触摸尺寸；
+- TV 居中 880 dp 详情宽度、大焦点目标与默认主操作焦点；
+- 主操作卡、状态卡、折叠区使用与设置首页一致的配色及焦点描边。
+
+**订阅编辑旋转：** `SubscriptionEditorActivity` 声明 `orientation|screenSize|keyboardHidden`，手机横竖屏切换不会因为 Activity 重建而把用户未保存的完整 URL 传入系统状态 Bundle。仍需测试不同软键盘和极窄屏幕布局。
+
+**后台授权：** `SettingsActivity` 在页面停止显示时不再因订阅下载完成弹出 VPN 授权请求；新配置依然写入安全存储，家长重新打开设置后可主动连接。
+
+### 本轮新增验证场景
+1. TV：Google 授权/诊断/节点页首个主操作可聚焦，返回按钮可被 D-pad 操作，展开折叠后列表可滚动到尾。
+2. 手机：Google OAuth Secret 输入、复制设备码、从浏览器返回授权页以及独立订阅编辑横竖屏切换；键盘不能遮挡永久不可触及的操作。
+3. 异步：节点列表请求期间 Home 再返回、诊断 API 验证中退出再重进、设备码过期/更换 Google 客户端，不出现错误成功状态。
+4. 安全：订阅与 OAuth 凭据不会进入普通截图、Intent extras、日志；其它 Android 应用不进入 KidsTubeTV 的应用专属 VPN 隧道。
+5. 仍需运行真实设备测试：Android TV OEM 键盘行为、Google OAuth、Mihomo TUN/DNS 和 IFrame 视频播放。
+

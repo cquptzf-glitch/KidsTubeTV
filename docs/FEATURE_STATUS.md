@@ -9,6 +9,15 @@
 - **适配器：** `proxy/LibMihomoCore.kt` 和 `proxy/LibMihomoProxyControl.kt` 位于 `src/main/java`。Debug、Preview、Release 使用同一 JNI 后端，不再分双源码集。
 - **网络：** Android `VpnService` 建立应用专属 TUN；`Clash.quickSetup/startTUN/stopTun` 和 `Clash.invokeAction` 接口保持；保留节点选择、订阅 YAML 下载、配置缓存和回滚。
 
+## 2026-11-12：统一设置子页与异步状态
+
+- `SettingsDetailPage` 新增通用详情页壳：TV 居中固定最大宽度、手机触控单列、主操作焦点、折叠状态及大卡片样式。
+- `GoogleAccountActivity`、`ProxyActivity`、`DiagnosticsActivity` 使用同一详情页壳，保留登录、节点选择和脱敏诊断原有功能。
+- Google 设备码必须确认本轮授权触发新会话状态后才显示授权成功；OAuth 页面增加截图保护。
+- 节点查询/切换和诊断 HTTP 请求使用最新请求 gate，页面停止后使旧回调失效；节点页恢复时重新读取，诊断复位 busy 标志。
+- `SubscriptionEditorActivity` 通过 `configChanges` 保留旋转时未保存的输入，避免把订阅 URL 放进 Bundle；`SettingsActivity` 不在后台自动触发 VPN 授权弹窗。
+- 新增 `SettingsDetailLayoutPolicyTest`；以本次 CI 编译/Lint/JVM 单测为准，尚不代表真机 TV 兼容性和 Google/API/VPN 可用性。
+
 ## 2026-11-12：设置 UI 双端信息架构
 
 - 五分区 `SettingsDestination` 路由：概览、应用网络、YouTube 账号、儿童内容、家长与安全。原有 `EXTRA_SECTION=1` 网络入口保留；其他分区使用新的索引。

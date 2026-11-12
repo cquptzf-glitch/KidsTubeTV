@@ -36,3 +36,12 @@
 - Android 9 的 TCP/DNS/IPv6、VPN 回收和覆盖安装仍需设备验收。
 
 实现位置：`proxy/LibMihomoCore.kt`、`proxy/LibMihomoProxyControl.kt`、`proxy/KidsVpnService.kt`、`ui/SettingsActivity.kt`。
+
+## 子页面统一（2026-11-12）
+
+- `SettingsDetailPage` 提供电视居中详情面板、手机顶部返回与单列滚动、主操作卡、状态卡和可折叠高级功能。
+- Google 登录将 OAuth Client ID/Secret 折叠并用 `FLAG_SECURE` 禁止普通截图；授权验证仍须使用 Google 官方设备码。
+- 节点页默认不暴露复杂 Clash 规则，仅在故障时进入；查询/切换/测速请求离页后失效。
+- 诊断页默认只显示一键检测，细项默认折叠；敏感数据不进入复制报告。
+- 订阅编辑横竖屏保留当前输入，避免把带 token URL 放进 savedInstanceState；下载在后台完成不自动打开系统授权窗口。
+

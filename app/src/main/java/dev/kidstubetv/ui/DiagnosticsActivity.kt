@@ -11,9 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
-import android.view.Gravity
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.webkit.WebView
 import dev.kidstubetv.data.ParentSession
@@ -49,6 +47,7 @@ class DiagnosticsActivity : Activity() {
     private lateinit var message: TextView
     private lateinit var advanced: LinearLayout
     private val credentialProbeGate = LatestResultGate()
+    private val diagnosticRequests = LatestResultGate()
     private var credentialProbeInFlight = false
     private var credentialProbeResult = "未检测"
 
@@ -65,60 +64,62 @@ class DiagnosticsActivity : Activity() {
         super.onCreate(state)
         UiDevice.showSystemBarsForHandheld(this)
         if (!store.hasPin || !ParentSession.authorized()) { finish(); return }
-        val scroller = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
-        val panel = TvUi.column(this)
-        scroller.addView(panel)
-        setContentView(scroller)
-        panel.addView(TvUi.label(this, "一键诊断",
-            if (UiDevice.isHandheld(this)) 24f else 29f, true))
-        panel.addView(TvUi.label(this, "先检测 VPN 和 Google 接口，再检查账号凭据。", 16f))
-        TvUi.space(panel, this, 10)
-        panel.addView(TvUi.primaryButton(this, "▶ 开始一键检测") {
+        val page = SettingsDetailPage(
+            this, "网络与账号诊断",
+            "检测分为 VPN、Google HTTPS 和 YouTube 凭据三步。不会上传订阅密钥、家长 PIN 或观看记录。"
+        )
+        val phone = UiDevice.isHandheld(this)
+        val quick = page.action("开始一键检测",
+            "检查应用专用 VPN、Google HTTPS 和 YouTube API 登录状态", primary = true) {
             runQuickDiagnostic()
-        })
-        message = TvUi.label(this, "点击开始检测；不会上传密钥或观看记录。", 16f)
-        panel.addView(message)
-        TvUi.space(panel, this, 16)
-        panel.addView(TvUi.button(this, "展开详细诊断 ▾") {
-            advanced.visibility = if (advanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        })
-        advanced = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
         }
-        panel.addView(advanced)
-        report = TvUi.label(this, "", 15f).apply {
+        message = page.status("尚未检测。网络异常不等于账号错误，可逐项排查。")
+
+        advanced = page.collapsible("详细诊断与单项测试", "展开设备信息、网络探测和 API 凭据检查")
+        report = TvUi.label(this, "", if (phone) 13f else 15f).apply {
             setTextColor(TvUi.text)
             setTextIsSelectable(true)
         }
-        advanced.addView(report)
+        advanced.addView(report, LinearLayout.LayoutParams(-1, -2))
         TvUi.space(advanced, this, 12)
-        advanced.addView(TvUi.button(this, "仅检测 Google HTTPS 连通性") {
+        fun advancedAction(title: String, hint: String, callback: () -> Unit) {
+            advanced.addView(SettingsDecor.action(this, title, hint, false, callback),
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = TvUi.dp(this@DiagnosticsActivity, if (phone) 8 else 12)
+                })
+        }
+        advancedAction("仅检查 Google HTTPS",
+            "不读取账号或订阅链接；判断网络可达性") {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
-                message.text = "检测已开始，通常几秒内显示结果…"
+                message.text = "正在检测 Google HTTPS…"
                 ProxyNetworkHealth.check(this)
             } else {
-                message.text = "请先在家长中心连接 VPN，再检测连通性"
+                message.text = "请先连接应用网络；不会回退直连。"
             }
-        })
-        advanced.addView(TvUi.button(this, "检查 Google OAuth / YouTube HTTPS 地址") {
-            message.text = "正在分别检测 Google OAuth 与 YouTube API 的 HTTPS 可达性…"
-            GoogleEndpointProbe.check { text ->
-                if (!isFinishing && !isDestroyed) {
-                    message.text = text
-                }
+        }
+        advancedAction("检查 OAuth / YouTube 服务地址",
+            "分别检测 Google OAuth 和 YouTube Data API 的 HTTPS 入口") {
+            val ticket = diagnosticRequests.begin()
+            message.text = "正在检测 Google OAuth 和 YouTube 的 HTTPS 连通性…"
+            GoogleEndpointProbe.check { answer ->
+                if (!isFinishing && !isDestroyed && ParentSession.authorized() &&
+                    diagnosticRequests.isCurrent(ticket)) message.text = answer
             }
-        })
-        advanced.addView(TvUi.button(this, "仅检查 YouTube API 凭据") {
+        }
+        advancedAction("验证 YouTube API 凭据",
+            "使用真实 YouTube API；只有 VPN 已连接时才会请求") {
             checkApiCredential()
-        })
-        advanced.addView(TvUi.button(this, "刷新诊断信息") { refresh() })
-        panel.addView(TvUi.button(this, "复制不含密钥的诊断报告") {
+        }
+        advancedAction("刷新设备诊断", "重新获取当前系统与 VPN 状态") { refresh() }
+
+        page.divider()
+        page.action("复制脱敏诊断报告",
+            "仅复制系统版本、网络状态和安全的错误类别") {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("KidsTubeTV diagnostics", safeReport()))
-            message.text = "已复制，可粘贴给开发者排查。"
-        })
-        panel.addView(TvUi.button(this, "返回网络设置") { finish() })
+            message.text = "脱敏诊断已复制。分享前仍请检查内容是否包含设备隐私。"
+        }
+        page.focusPrimary(quick)
         refresh()
     }
 
@@ -130,8 +131,10 @@ class DiagnosticsActivity : Activity() {
         }
         message.text = "① VPN 已启动，检测 Google OAuth 与 YouTube HTTPS…"
         ProxyNetworkHealth.check(this)
+        val ticket = diagnosticRequests.begin()
         GoogleEndpointProbe.check { https ->
-            if (isFinishing || isDestroyed || !ParentSession.authorized()) return@check
+            if (isFinishing || isDestroyed || !ParentSession.authorized() ||
+                !diagnosticRequests.isCurrent(ticket)) return@check
             if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
                 message.text = "检测期间 VPN 断开；请重新连接后再试"
                 return@check
@@ -168,9 +171,9 @@ class DiagnosticsActivity : Activity() {
                 YouTubeRepository(store).checkApiCredentials()
             }
             runOnUiThread {
-                credentialProbeInFlight = false
                 if (isFinishing || isDestroyed || !ParentSession.authorized() ||
                     !credentialProbeGate.isCurrent(request)) return@runOnUiThread
+                credentialProbeInFlight = false
                 credentialProbeResult = outcome.fold(
                     { "成功：API 凭据与该接口可用（不代表 IFrame 播放成功）" },
                     { ApiProbeErrorPolicy.describe(it) }
@@ -195,6 +198,9 @@ class DiagnosticsActivity : Activity() {
 
     override fun onStop() {
         credentialProbeGate.invalidate()
+        diagnosticRequests.invalidate()
+        // A stopped screen must not stay permanently busy when reopened.
+        credentialProbeInFlight = false
         unregisterReceiver(receiver)
         super.onStop()
     }

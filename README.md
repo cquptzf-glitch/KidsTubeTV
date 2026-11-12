@@ -20,6 +20,14 @@
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
 - **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建使用固定 `libmihomo-android` 的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
+## 2026-11-12 设置 UI 第二轮完善（TV / 手机）
+
+- **统一子页面：** Google TV 登录、节点选择和诊断页均改为复用 `SettingsDetailPage`，手机采用紧凑标题/返回栏与可滚动卡片，电视采用最大 880 dp 的居中详情区和较大遥控器焦点目标。
+- **授权安全：** Google 页面启用 `FLAG_SECURE`，OAuth 客户端配置默认折叠；设备码轮询未真正取得新授权时不再错误显示“登录成功”。仍必须提供自己的 Google Cloud TV OAuth 客户端。
+- **异步稳定性：** 节点查询/切换在离开页面后不再回填过期结果，重新进入时可重新加载；诊断离开页面会释放“正在检测”状态，防止永久无法再检测。
+- **订阅与后台：** 编辑页面在手机旋转时保留未保存的输入，不把敏感 URL 放进 Bundle；后台下载完成不在别的应用上弹出 VPN 授权界面。
+- **验证边界：** JVM 单测、Lint 和 APK 构建以本提交 GitHub Actions 为准，Android TV 遥控器/软键盘及手机真机联网仍需要设备验收。
+
 ## 2026-11-12 设置 UI 全面重构（TV / 手机）
 
 - **信息架构：** 新增独立的「设置概览」，应用网络、YouTube 账号、儿童内容、家长与安全分别进入详情页。修改 PIN 和清除观看历史迁至家长与安全，避免儿童白名单页混入安全操作。

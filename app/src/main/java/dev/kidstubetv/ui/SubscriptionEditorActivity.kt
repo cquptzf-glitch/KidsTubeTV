@@ -70,8 +70,12 @@ class SubscriptionEditorActivity : Activity() {
         val frame = FrameLayout(this).apply { setBackgroundColor(TvUi.bg) }
         setContentView(frame)
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 }
+            ?: (resources.displayMetrics.widthPixels / resources.displayMetrics.density).toInt()
+        val editorWidthDp = SettingsDetailLayoutPolicy.contentWidthDp(widthDp, handheld, 780)
         frame.addView(column, FrameLayout.LayoutParams(
-            if (handheld) -1 else TvUi.dp(this, 780), -1, Gravity.CENTER_HORIZONTAL
+            if (editorWidthDp == null) -1 else TvUi.dp(this, editorWidthDp),
+            -1, Gravity.CENTER_HORIZONTAL
         ))
 
         val scroll = ScrollView(this).apply {
