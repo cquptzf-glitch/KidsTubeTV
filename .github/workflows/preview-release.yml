@@ -9,11 +9,17 @@ on:
       version_code:
         description: 'Increasing Android versionCode'
         required: true
-        default: '12'
+        default: '20'
       preview_suffix:
         description: 'Isolated package suffix when no private preview signer is configured'
         required: true
         default: '.preview.b10'
+  # Allow a vetted version request committed directly to main to publish a
+  # preview even when GitHub Actions workflow_dispatch is not API-accessible.
+  push:
+    branches: [main]
+    paths:
+      - '.github/release-requests/preview.txt'
 permissions:
   contents: write
 jobs:
@@ -35,24 +41,43 @@ jobs:
           SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
           "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
-      - name: Validate preview version
+      - name: Validate preview version and prevent tag collision
         env:
-          VERSION_NAME: ${{ inputs.version_name }}
-          VERSION_CODE: ${{ inputs.version_code }}
-          PREVIEW_SUFFIX: ${{ inputs.preview_suffix }}
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+          INPUT_PREVIEW_SUFFIX: ${{ inputs.preview_suffix }}
+        shell: bash
         run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            mapfile -t requested < .github/release-requests/preview.txt
+            [[ "${#requested[@]}" == 3 ]] || {
+              echo "::error::Preview request must contain exactly three lines."; exit 1;
+            }
+            VERSION_NAME="${requested[0]}"
+            VERSION_CODE="${requested[1]}"
+            PREVIEW_SUFFIX="${requested[2]}"
+          else
+            VERSION_NAME="$INPUT_VERSION_NAME"
+            VERSION_CODE="$INPUT_VERSION_CODE"
+            PREVIEW_SUFFIX="$INPUT_PREVIEW_SUFFIX"
+          fi
           [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] || exit 1
           [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || exit 1
           [[ "$PREVIEW_SUFFIX" =~ ^\.preview\.b[1-9][0-9]*$ ]] || exit 1
+          if git ls-remote --tags origin "refs/tags/v$VERSION_NAME" | grep -q .; then
+            echo "::error::Release tag v$VERSION_NAME already exists; will not overwrite it."
+            exit 1
+          fi
           echo "KIDSTUBE_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "KIDSTUBE_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "KIDSTUBE_PREVIEW_FALLBACK_SUFFIX=$PREVIEW_SUFFIX" >> "$GITHUB_ENV"
       - name: Prepare preview signing or isolated debug package
         env:
           KIDSTUBE_PREVIEW_KEYSTORE_BASE64: ${{ secrets.KIDSTUBE_PREVIEW_KEYSTORE_BASE64 }}
           KIDSTUBE_PREVIEW_STORE_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_STORE_PASSWORD }}
           KIDSTUBE_PREVIEW_KEY_ALIAS: ${{ secrets.KIDSTUBE_PREVIEW_KEY_ALIAS }}
           KIDSTUBE_PREVIEW_KEY_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_KEY_PASSWORD }}
-          KIDSTUBE_PREVIEW_FALLBACK_SUFFIX: ${{ inputs.preview_suffix }}
         run: bash scripts/prepare-preview-signing.sh
       - name: Download and verify pinned libmihomo AAR
         run: bash scripts/fetch-mihomo.sh
@@ -103,18 +128,42 @@ jobs:
       - name: Write preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          Preview APK built from main using pinned libmihomo-android v0.3.13.
-          Signature, Android 9 minSDK, native ABIs and zip alignment verified by CI.
-          Without private preview signing secrets, this is a VERSION-SCOPED parallel
-          installation, NOT an in-place upgrade. Google login, TUN networking and
-          YouTube playback still require real-device verification.
+          # KidsTubeTV v0.3.0-beta.10 · Android TV / phone preview
+
+          This preview is built directly from the latest main branch with
+          the pinned **oviron/libmihomo-android v0.3.13** core, not FlClash.
+
+          ## What's new
+          - Redesigned parent settings for TV remotes and phone touch controls:
+            overview, app network, YouTube, child content and parent security.
+          - Unified the Google device-code login, node selector and diagnostics pages.
+          - Separate, privacy-protected subscription URL editor with clipboard helpers.
+          - App-only Android VPN allowlist; other apps are not routed through this VPN.
+          - Safer subscription update races, bounded YouTube HTTP responses,
+            Google auth state checks and stale async callback handling.
+
+          ## Installation
+          - Supports Android 9+ (API 28); APK contains ARMv7 and ARM64 native libraries.
+          - Check APK_INSTALL_INFO.txt for the precise package name and signing mode.
+          - If private preview signing secrets are absent, this release uses a
+            version-specific parallel install package rather than replacing the
+            previous beta or a differently signed build.
+          - Do not uninstall an older build until you've independently saved any
+            configuration you need to keep; Android app data is not shared.
+
+          ## Verification scope
+          - CI verifies Lint, JVM unit tests, APK signature, ABI list, alignment
+            and SHA-256. Real-device VPN, Google OAuth and YouTube IFrame playback
+            have **not** been fully verified on the target TV/phone.
+          - An Android device generally permits only one active VPN at a time;
+            the app-only traffic rule does not make two concurrent VPNs possible.
           EOF
       - name: Publish prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.version_name }}
+          tag_name: v${{ env.KIDSTUBE_VERSION_NAME }}
           target_commitish: ${{ github.sha }}
-          name: KidsTubeTV v${{ inputs.version_name }} — libmihomo preview
+          name: KidsTubeTV v${{ env.KIDSTUBE_VERSION_NAME }} — libmihomo preview
           prerelease: true
           draft: false
           body_path: dist/release/RELEASE_NOTES.md

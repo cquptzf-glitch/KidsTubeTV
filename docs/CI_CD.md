@@ -27,6 +27,19 @@ gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 
 配置完整的四个 `KIDSTUBE_PREVIEW_*` Secrets 时使用固定私有证书和 `dev.kidstubetv.preview`；否则使用 `.preview.b10` 等版本隔离包名与临时 Debug 签名，适合新安装，**不保证覆盖升级**。
 
+## 从主线提交请求构建预览发布
+
+当无法直接使用 GitHub `workflow_dispatch` API 时，可在 `main` 提交
+`.github/release-requests/preview.txt`，**严格三行**依次为：
+
+```text
+0.3.0-beta.10
+20
+.preview.b10
+```
+
+`preview-release.yml` 仅在该文件变化时由 main 的 push 触发；使用相同的验证、签名、哈希和发布步骤，并检查 tag 尚不存在，防止覆盖已有 Release。常规源代码提交不会触发重复发布。无固定预览私钥时按版本使用不同的 `.preview.bN` 包名，避免签名冲突；该模式不能自动覆盖旧版，也不迁移旧版本本地数据。
+
 ## 生产发布：v* 标签触发
 
 [release.yml](../.github/workflows/release.yml) 使用以下私有 GitHub Actions Secrets：
