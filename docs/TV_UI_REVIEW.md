@@ -1,12 +1,19 @@
 # KidsTubeTV 遥控器与代理 UI 简化设计
 
-更新：2026-11-11。项目选用 [oviron/libmihomo-android](https://github.com/oviron/libmihomo-android) v0.3.13 单一原生后端。
+更新：2026-11-12。项目选用 [oviron/libmihomo-android](https://github.com/oviron/libmihomo-android) v0.3.13 单一原生后端。
 
 ## 儿童端
 
 - 首页侧栏按需展开，闲置自动收缩；电视使用大封面与清晰的方向键焦点提示。
 - 播放、收藏、返回和上下集使用遥控器易操作的大焦点目标；儿童不能看到订阅 URL、节点配置或密钥。
 - 手机支持竖屏和横屏适配，不强制 TV 横屏布局。
+
+## 家长设置双端框架
+
+- 电视：左侧固定「概览 / 应用网络 / YouTube 账号 / 儿童内容 / 家长与安全」导航，右侧为大焦点卡片；方向左从操作区返回左侧导航，返回先到概览。
+- 手机：取消横向 TV 标签，顶栏返回 + 单列概览/详情；无需左右方向键，操作卡片可直接点击。
+- 订阅编辑使用独立 `SubscriptionEditorActivity`：电视优先聚焦返回按钮避免自动弹出软键盘；手机保留底部「保存并下载」主操作。
+- PIN、观看记录清理、设备诊断位于「家长与安全」；儿童白名单页专注于内容。详见[设置 UI 详细设计](SETTINGS_UI_REDESIGN.md)。
 
 ## 家长网络页
 

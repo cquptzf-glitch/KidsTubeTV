@@ -9,6 +9,14 @@
 - **适配器：** `proxy/LibMihomoCore.kt` 和 `proxy/LibMihomoProxyControl.kt` 位于 `src/main/java`。Debug、Preview、Release 使用同一 JNI 后端，不再分双源码集。
 - **网络：** Android `VpnService` 建立应用专属 TUN；`Clash.quickSetup/startTUN/stopTun` 和 `Clash.invokeAction` 接口保持；保留节点选择、订阅 YAML 下载、配置缓存和回滚。
 
+## 2026-11-12：设置 UI 双端信息架构
+
+- 五分区 `SettingsDestination` 路由：概览、应用网络、YouTube 账号、儿童内容、家长与安全。原有 `EXTRA_SECTION=1` 网络入口保留；其他分区使用新的索引。
+- 电视用左侧固定导航与 `wireTvFocus`，手机采用顶栏返回与概览卡片，旋转时保存当前分区。
+- `SubscriptionEditorActivity` 改成独立全页输入，支持复制/粘贴、TV 初始焦点、手机底部主按钮；使用 `FLAG_SECURE`，并且不将订阅 token 放到 Intent。
+- PIN / 清除观看历史迁到「家长与安全」；原有儿童白名单、Google 授权、节点选择及诊断功能继续使用现有实现。
+- `SettingsNavigationPolicyTest` 覆盖历史网络入口索引、错误索引和返回路线。自动化测试不会代替 D-pad、触屏和系统键盘的真机手动验收。
+
 ## 2026-11-12：应用专用 VPN 及极简家长页
 
 - `KidsVpnService.appOnlyBuilder()` 使用 `AppOnlyVpnScope.allowedPackage(packageName)`，固定只添加当前应用包名，避免空 allowlist 导致全设备走 VPN；JVM 测试验证正式/预览包名和输入有效性。

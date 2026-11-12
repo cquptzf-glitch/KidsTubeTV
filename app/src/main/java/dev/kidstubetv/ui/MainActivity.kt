@@ -694,10 +694,10 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    /** First-time setup opens the network tab directly, saving TV remote steps. */
+    /** First run opens network setup; configured homes open the overview. */
     private fun openParentSettings() {
         startActivity(Intent(this, SettingsActivity::class.java).apply {
-            putExtra(SettingsActivity.EXTRA_SECTION, 1)
+            putExtra(SettingsActivity.EXTRA_SECTION, if (settings.hasProfile) 0 else 1)
         })
     }
 

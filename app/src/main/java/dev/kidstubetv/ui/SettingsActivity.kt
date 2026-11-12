@@ -4,10 +4,6 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.ClipboardManager
-import android.content.ClipData
-import android.content.ClipDescription
-import android.os.PersistableBundle
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -36,7 +32,6 @@ import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
 import dev.kidstubetv.data.SubscriptionFormat
-import dev.kidstubetv.data.ClipboardSubscriptionPolicy
 import dev.kidstubetv.data.SubscriptionFailurePolicy
 import dev.kidstubetv.data.WatchHistory
 import dev.kidstubetv.data.WatchTime
@@ -81,6 +76,11 @@ class SettingsActivity : Activity() {
     private lateinit var networkDetail: TextView
     private lateinit var childSummary: TextView
     private lateinit var accountSummary: TextView
+    private lateinit var parentSummary: TextView
+    private lateinit var overviewNetwork: SettingsActionTile
+    private lateinit var overviewYoutube: SettingsActionTile
+    private lateinit var overviewContent: SettingsActionTile
+    private lateinit var overviewParent: SettingsActionTile
     private lateinit var networkAdvanced: LinearLayout
     private lateinit var subscriptionTile: SettingsActionTile
     private lateinit var subscriptionRefreshTile: SettingsActionTile
@@ -89,6 +89,7 @@ class SettingsActivity : Activity() {
     private val tabs = mutableListOf<Button>()
     private var selectedSection = 0
     private lateinit var pageTitle: TextView
+    private lateinit var mobileBackButton: Button
     private lateinit var searchTile: SettingsActionTile
     private lateinit var autoplayTile: SettingsActionTile
     private lateinit var vpnTile: SettingsActionTile
@@ -108,86 +109,88 @@ class SettingsActivity : Activity() {
         if (store.hasPin && !ParentSession.authorized()) { finish(); return }
         UiDevice.showSystemBarsForHandheld(this)
 
-        // TV keeps a wide fixed rail, touch devices use a compact scrolling
-        // tab strip above the same three feature panels.
+        // TV: persistent D-pad rail and focusable content pane.
+        // Phone: a compact header and single-column overview/detail navigation.
         val root = LinearLayout(this).apply {
             orientation = if (handheld) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             setBackgroundColor(TvUi.bg)
         }
         setContentView(root)
-        val rail = LinearLayout(this).apply {
-            orientation = if (handheld) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            if (handheld) {
-                setPadding(TvUi.dp(this@SettingsActivity, 12), TvUi.dp(this@SettingsActivity, 6),
-                    TvUi.dp(this@SettingsActivity, 12), TvUi.dp(this@SettingsActivity, 6))
-            } else {
-                setPadding(TvUi.dp(this@SettingsActivity, 20), TvUi.dp(this@SettingsActivity, 28),
-                    TvUi.dp(this@SettingsActivity, 18), TvUi.dp(this@SettingsActivity, 20))
-            }
-            setBackgroundColor(0xFF142A35.toInt())
-        }
-        if (handheld) {
-            val tabScroller = android.widget.HorizontalScrollView(this).apply {
-                isHorizontalScrollBarEnabled = false
+        if (!handheld) {
+            val rail = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(TvUi.dp(this@SettingsActivity, 18),
+                    TvUi.dp(this@SettingsActivity, 24),
+                    TvUi.dp(this@SettingsActivity, 14),
+                    TvUi.dp(this@SettingsActivity, 20))
                 setBackgroundColor(0xFF142A35.toInt())
             }
-            tabScroller.addView(rail)
-            root.addView(tabScroller, LinearLayout.LayoutParams(-1, TvUi.dp(this, 66)))
-        } else {
-            root.addView(rail, LinearLayout.LayoutParams(TvUi.dp(this, 232), -1))
-            rail.addView(TvUi.label(this, "✦ KidsTubeTV", 24f, true))
-            rail.addView(TvUi.label(this, "家长中心", 16f).apply { setTextColor(TvUi.muted) })
-            TvUi.space(rail, this, 34)
-        }
-
-        listOf("儿童内容", "应用网络", "YouTube").forEachIndexed { index, title ->
-            val button = Button(this).apply {
-                id = View.generateViewId()
-                text = if (handheld) title else "${index + 1}  " + title
-                isAllCaps = false
-                textSize = if (handheld) 15f else 18f
-                gravity = Gravity.CENTER_VERTICAL or if (handheld) Gravity.CENTER else Gravity.START
-                setPadding(TvUi.dp(this@SettingsActivity, if (handheld) 12 else 18), 0,
-                    TvUi.dp(this@SettingsActivity, 12), 0)
-                setTextColor(TvUi.text)
-                background = SettingsDecor.navShape(this@SettingsActivity, index == 0, false)
-                setOnClickListener { showSection(index, moveFocus = true) }
-                setOnFocusChangeListener { _, hasFocus ->
-                    background = SettingsDecor.navShape(this@SettingsActivity,
-                        selectedSection == index, hasFocus)
+            root.addView(rail, LinearLayout.LayoutParams(TvUi.dp(this, 244), -1))
+            rail.addView(TvUi.label(this, "✦ KidsTubeTV", 23f, true))
+            rail.addView(TvUi.label(this, "家长中心", 15f).apply { setTextColor(TvUi.muted) })
+            TvUi.space(rail, this, 23)
+            SettingsDestination.entries.forEachIndexed { index, route ->
+                val button = Button(this).apply {
+                    id = View.generateViewId()
+                    text = route.navigationTitle
+                    isAllCaps = false
+                    textSize = 18f
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    setPadding(TvUi.dp(this@SettingsActivity, 17), 0,
+                        TvUi.dp(this@SettingsActivity, 10), 0)
+                    setTextColor(TvUi.text)
+                    background = SettingsDecor.navShape(this@SettingsActivity, index == 0, false)
+                    setOnClickListener { showSection(index, moveFocus = true) }
+                    setOnFocusChangeListener { _, focused ->
+                        background = SettingsDecor.navShape(this@SettingsActivity,
+                            selectedSection == index, focused)
+                    }
                 }
+                tabs.add(button)
+                rail.addView(button, LinearLayout.LayoutParams(-1, TvUi.dp(this, 65)).apply {
+                    bottomMargin = TvUi.dp(this@SettingsActivity, 6)
+                })
             }
-            tabs.add(button)
-            rail.addView(button, LinearLayout.LayoutParams(
-                if (handheld) TvUi.dp(this, 115) else -1,
-                TvUi.dp(this, if (handheld) 50 else 72)
-            ).apply {
-                if (handheld) rightMargin = TvUi.dp(this@SettingsActivity, 6)
-                else bottomMargin = TvUi.dp(this@SettingsActivity, 11)
-            })
-        }
-        if (!handheld) {
             rail.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-            rail.addView(SettingsDecor.action(this, "← 返回儿童首页", "关闭家长设置") { finish() },
-                LinearLayout.LayoutParams(-1, TvUi.dp(this, 78)))
+            rail.addView(SettingsDecor.action(this, "← 返回儿童首页", "退出家长设置") { finish() },
+                LinearLayout.LayoutParams(-1, TvUi.dp(this, 74)))
         }
 
         val right = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(TvUi.dp(this@SettingsActivity, if (handheld) 16 else 28),
-                TvUi.dp(this@SettingsActivity, if (handheld) 7 else 17),
-                TvUi.dp(this@SettingsActivity, if (handheld) 16 else 32), 0)
+            val horizontal = if (handheld) 15 else 28
+            setPadding(TvUi.dp(this@SettingsActivity, horizontal),
+                TvUi.dp(this@SettingsActivity, if (handheld) 8 else 16),
+                TvUi.dp(this@SettingsActivity, horizontal), 0)
         }
         root.addView(right, if (handheld)
-            LinearLayout.LayoutParams(-1, 0, 1f)
+            LinearLayout.LayoutParams(-1, -1)
         else LinearLayout.LayoutParams(0, -1, 1f))
-        pageTitle = TvUi.label(this, "网络与 VPN", if (handheld) 22f else 28f, true)
-        right.addView(pageTitle)
+        if (handheld) {
+            val header = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            mobileBackButton = TvUi.button(this, "‹ 返回") { onBackPressed() }.apply {
+                textSize = 15f
+            }
+            header.addView(mobileBackButton, LinearLayout.LayoutParams(
+                TvUi.dp(this, 84), TvUi.dp(this, 46)).apply {
+                rightMargin = TvUi.dp(this@SettingsActivity, 8)
+            })
+            pageTitle = TvUi.label(this, "设置概览", 23f, true)
+            header.addView(pageTitle, LinearLayout.LayoutParams(0, -2, 1f))
+            right.addView(header)
+        } else {
+            pageTitle = TvUi.label(this, "设置概览", 28f, true)
+            right.addView(pageTitle)
+        }
+
         summary = TvUi.label(this, "", if (handheld) 13f else 15f).apply {
             setTextColor(TvUi.muted)
         }
         right.addView(summary)
-        setupTile = SettingsDecor.action(this, "配置引导", "根据当前状态完成下一步", true) {
+        setupTile = SettingsDecor.action(this, "继续配置", "完成下一步初始化", true) {
             advanceSetup()
         }
         right.addView(setupTile, LinearLayout.LayoutParams(-1, -2).apply {
@@ -205,8 +208,7 @@ class SettingsActivity : Activity() {
                 0, TvUi.dp(this@SettingsActivity, 32))
         }
         scroller.addView(content)
-
-        repeat(3) {
+        repeat(SettingsDestination.entries.size) {
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 visibility = View.GONE
@@ -214,10 +216,14 @@ class SettingsActivity : Activity() {
             sections.add(panel)
             content.addView(panel)
         }
-        buildChildSection(sections[0])
-        buildNetworkSection(sections[1])
-        buildAccountSection(sections[2])
-        showSection(intent.getIntExtra(EXTRA_SECTION, 1).coerceIn(0, 2), moveFocus = false)
+        buildOverviewSection(sections[SettingsDestination.OVERVIEW.ordinal])
+        buildNetworkSection(sections[SettingsDestination.NETWORK.ordinal])
+        buildAccountSection(sections[SettingsDestination.YOUTUBE.ordinal])
+        buildChildSection(sections[SettingsDestination.CONTENT.ordinal])
+        buildParentSection(sections[SettingsDestination.PARENT.ordinal])
+
+        val initial = state?.getInt(SAVED_SECTION) ?: intent.getIntExtra(EXTRA_SECTION, 0)
+        showSection(SettingsDestination.fromIndex(initial).ordinal, moveFocus = !handheld)
         refreshSummaries()
         if (!store.hasPin) setPinDialog(initial = true)
     }
@@ -251,23 +257,54 @@ class SettingsActivity : Activity() {
     }
 
     private fun showSection(index: Int, moveFocus: Boolean = false) {
-        selectedSection = index
-        pageTitle.text = listOf("儿童内容", "应用网络", "YouTube 账号")[index]
+        val route = SettingsDestination.fromIndex(index)
+        selectedSection = route.ordinal
+        pageTitle.text = route.title
         sections.forEachIndexed { i, panel ->
-            panel.visibility = if (i == index) View.VISIBLE else View.GONE
+            panel.visibility = if (i == route.ordinal) View.VISIBLE else View.GONE
         }
         tabs.forEachIndexed { i, button ->
-            button.background = SettingsDecor.navShape(this, i == index, button.hasFocus())
+            button.background = SettingsDecor.navShape(this,
+                i == route.ordinal, button.hasFocus())
+        }
+        val overview = route == SettingsDestination.OVERVIEW
+        summary.visibility = if (overview) View.VISIBLE else View.GONE
+        setupTile.visibility = if (overview) View.VISIBLE else View.GONE
+        if (handheld) {
+            mobileBackButton.text = if (overview) "‹ 首页" else "‹ 概览"
         }
         scroller.scrollTo(0, 0)
-        if (moveFocus && !handheld) {
-            val targets = ArrayList<View>()
-            sections[index].addFocusables(targets, View.FOCUS_DOWN)
-            targets.firstOrNull()?.let { target ->
-                target.nextFocusLeftId = tabs[index].id
-                target.requestFocus()
-            }
+        wireTvFocus(moveFocus)
+    }
+
+    /**
+     * Explicit left/right focus edges avoid TV remote focus escaping into the
+     * previous screen. New items revealed by an advanced accordion are wired too.
+     */
+    private fun wireTvFocus(moveFocus: Boolean = false) {
+        if (handheld) return
+        val targets = ArrayList<View>()
+        sections[selectedSection].addFocusables(targets, View.FOCUS_FORWARD)
+        val railId = tabs[selectedSection].id
+        targets.forEach { target ->
+            if (target.id == View.NO_ID) target.id = View.generateViewId()
+            target.nextFocusLeftId = railId
         }
+        targets.firstOrNull()?.let { first ->
+            tabs[selectedSection].nextFocusRightId = first.id
+            if (moveFocus) first.requestFocus()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(SAVED_SECTION, selectedSection)
+        super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("TV remote and Android back both return to the settings overview")
+    override fun onBackPressed() {
+        val back = SettingsNavigationPolicy.back(SettingsDestination.fromIndex(selectedSection))
+        if (back == null) finish() else showSection(back.ordinal, moveFocus = !handheld)
     }
 
     private fun heading(panel: LinearLayout, title: String, hint: String) {
@@ -298,7 +335,51 @@ class SettingsActivity : Activity() {
             val open = advanced.visibility != View.VISIBLE
             advanced.visibility = if (open) View.VISIBLE else View.GONE
             button.setTitle(title + if (open) "  ▴" else "  ▾")
+            wireTvFocus()
         }
+    }
+
+    private fun buildOverviewSection(panel: LinearLayout) {
+        heading(panel, "一眼看懂当前状态", "只显示最重要的信息，点击卡片进入对应设置。")
+        overviewNetwork = action(panel, "应用网络", "检查网络配置和连接状态", true) {
+            showSection(SettingsDestination.NETWORK.ordinal, moveFocus = !handheld)
+        }
+        overviewYoutube = action(panel, "YouTube 账号", "Google 授权或使用 API Key") {
+            showSection(SettingsDestination.YOUTUBE.ordinal, moveFocus = !handheld)
+        }
+        overviewContent = action(panel, "儿童内容", "频道白名单、观看限制与自动播放") {
+            showSection(SettingsDestination.CONTENT.ordinal, moveFocus = !handheld)
+        }
+        overviewParent = action(panel, "家长与安全", "修改 PIN、清理观看记录与诊断") {
+            showSection(SettingsDestination.PARENT.ordinal, moveFocus = !handheld)
+        }
+    }
+
+    private fun buildParentSection(panel: LinearLayout) {
+        heading(panel, "家长与安全", "敏感操作仅在家长 PIN 解锁后允许。")
+        parentSummary = TvUi.label(this, "", if (handheld) 15f else 18f)
+        panel.addView(parentSummary)
+        TvUi.space(panel, this, 12)
+        action(panel, "修改家长 PIN", "使用 4～12 位数字，验证后才能访问设置", true) {
+            setPinDialog(initial = false)
+        }
+        action(panel, "清除历史与收藏", "删除本机观看历史和收藏，需要再次确认") {
+            AlertDialog.Builder(this)
+                .setTitle("清除观看数据？")
+                .setMessage("将清除本机的观看历史和收藏，操作无法撤销。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确认清除") { _, _ ->
+                    WatchHistory(this).clear()
+                    refreshSummaries()
+                    parentSummary.text = "✓ 本机观看历史与收藏已清空"
+                }.show()
+        }
+        action(panel, "设备与网络诊断", "查看脱敏设备信息，不包含订阅令牌") {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        panel.addView(TvUi.label(this,
+            "为了安全，订阅令牌和 Google 凭据不会出现在普通诊断日志中。",
+            if (handheld) 13f else 15f).apply { setTextColor(TvUi.muted) })
     }
 
     private fun buildChildSection(panel: LinearLayout) {
@@ -339,16 +420,6 @@ class SettingsActivity : Activity() {
             editLines("禁止的视频 ID（每行 11 位）", store.blockedVideosText) {
                 store.blockedVideosText = it
             }
-        }
-        action(advanced, "修改家长 PIN", "设置 4–12 位数字") { setPinDialog(initial = false) }
-        action(advanced, "清除历史与收藏", "不可撤销，请确认") {
-            AlertDialog.Builder(this)
-                .setMessage("要清空本机的观看记录和收藏吗？")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("确认清除") { _, _ ->
-                    WatchHistory(this).clear()
-                    summary.text = "观看历史与收藏已清除"
-                }.show()
         }
     }
 
@@ -506,7 +577,7 @@ class SettingsActivity : Activity() {
             SetupFlowPolicy.Step.PROFILE -> { showSection(1); editSubscription() }
             SetupFlowPolicy.Step.VPN -> { showSection(1); connectOrTestVpn() }
             SetupFlowPolicy.Step.AUTH -> showSection(2)
-            SetupFlowPolicy.Step.APPROVAL -> { showSection(0); addChannelFromLink() }
+            SetupFlowPolicy.Step.APPROVAL -> { showSection(SettingsDestination.CONTENT.ordinal); addChannelFromLink() }
             SetupFlowPolicy.Step.COMPLETE -> finish()
         }
     }
@@ -534,8 +605,25 @@ class SettingsActivity : Activity() {
             SetupFlowPolicy.Step.APPROVAL -> "粘贴频道链接，只允许儿童视频播放"
             SetupFlowPolicy.Step.COMPLETE -> "网络、内容审核和家长设置已齐备"
         })
-        summary.text = "儿童频道：" + store.allowedChannels.size + "   ·   今日已看 " +
+        summary.text = "已批准 " + store.allowedChannels.size + " 个频道  ·  今日已看 " +
             (WatchTime(this).elapsedSeconds() / 60) + " 分钟"
+        overviewNetwork.setTitle("应用网络  ·  " + when (ProxyStatus.phase) {
+            ProxyStatus.Phase.READY -> "已连接"
+            ProxyStatus.Phase.STARTING -> "连接中"
+            ProxyStatus.Phase.ERROR -> "连接异常"
+            ProxyStatus.Phase.OFF -> "未连接"
+        })
+        overviewNetwork.setSubtitle(if (store.hasProfile) "仅本应用代理 · 已保存配置"
+            else "还没有网络订阅，点击添加")
+        overviewYoutube.setSubtitle(if (GoogleTvAuth(this).isLinked) "Google 已授权"
+            else if (store.apiKey.isNotBlank()) "已配置 YouTube API Key"
+            else "未配置；可扫码授权或使用 API Key")
+        overviewContent.setSubtitle(store.allowedChannels.size.toString() + " 个频道 · " +
+            store.approvedVideoIds.size + " 个视频 · 每天 " + store.dailyLimitMinutes + " 分钟")
+        overviewParent.setSubtitle(if (store.hasPin) "家长 PIN 已设置 · 可管理设备数据"
+            else "需要创建家长 PIN")
+        parentSummary.text = if (store.hasPin) "● PIN 已启用，家长会话有时间限制"
+            else "○ 尚未设置家长 PIN"
         childSummary.text = "已批准 " + store.allowedChannels.size + " 个频道 · " +
             store.approvedVideoIds.size + " 个视频 · 每日 " + store.dailyLimitMinutes + " 分钟"
         searchTile.setTitle("允许搜索  " + if (store.searchAllowed) "● 已开启" else "○ 已关闭")
@@ -741,104 +829,12 @@ class SettingsActivity : Activity() {
             }.show()
     }
 
-    /**
-     * Explicit parent-only URL editor. Do not hide the address as a password:
-     * the parent needs to inspect and copy it when testing on a phone/TV.
-     * Never put the full URL into diagnostics, notifications, or normal status.
-     */
+    /** Dedicated, privacy-protected editor with touch and D-pad layouts. */
     private fun editSubscription() {
-        if (!ParentSession.authorized()) {
-            finish()
-            return
-        }
-        val panel = TvUi.column(this).apply {
-            setPadding(TvUi.dp(this@SettingsActivity, 14),
-                TvUi.dp(this@SettingsActivity, 10),
-                TvUi.dp(this@SettingsActivity, 14),
-                TvUi.dp(this@SettingsActivity, 8))
-        }
-        val editor = TvUi.input(this, "https://...（Clash / Mihomo YAML）",
-            store.subscriptionUrl).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(true)
-            setSelectAllOnFocus(false)
-            isLongClickable = true
-            contentDescription = "完整 Clash 订阅 URL，可编辑和长按选择复制"
-        }
-        panel.addView(TvUi.label(this, "完整订阅地址", 17f, true))
-        panel.addView(editor, LinearLayout.LayoutParams(-1, -2))
-        panel.addView(TvUi.label(this,
-            "当前仅家长可查看。链接可能包含访问令牌，复制后请注意系统剪贴板的隐私。", 13f)
-            .apply { setTextColor(TvUi.muted) })
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        panel.addView(row, LinearLayout.LayoutParams(-1, -2))
-        val copy = TvUi.button(this, "复制地址") {
-            val text = editor.text.toString().trim()
-            if (text.isEmpty()) {
-                editor.error = "还没有填写订阅地址"
-                return@button
-            }
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("KidsTubeTV Clash 订阅", text)
-            if (Build.VERSION.SDK_INT >= 33) {
-                clip.description.extras = PersistableBundle().apply {
-                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-                }
-            }
-            clipboard.setPrimaryClip(clip)
-            networkDetail.text = "链接已复制到剪贴板，请妥善保管其中的订阅令牌"
-        }
-        row.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
-        val paste = TvUi.button(this, "粘贴地址") {
-            val value = runCatching {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.primaryClip?.takeIf { it.itemCount > 0 }
-                    ?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
-            }.getOrDefault("")
-            val candidate = ClipboardSubscriptionPolicy.candidate(value, editor.text.toString())
-            if (candidate == null) {
-                editor.error = "剪贴板没有有效的新 HTTPS 订阅地址"
-            } else {
-                editor.setText(candidate)
-                editor.setSelection(editor.text.length)
-            }
-        }
-        row.addView(paste, LinearLayout.LayoutParams(0, -2, 1f))
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("设置应用网络订阅")
-            .setView(panel)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存并下载", null)
-            .create()
-        dialog.setOnShowListener {
-            fun commit() {
-                val normalized = try {
-                    SubscriptionFormat.normalizeUrl(editor.text.toString())
-                } catch (_: Exception) {
-                    editor.error = "请输入完整的公开 HTTPS Clash/Mihomo 订阅地址"
-                    return
-                }
-                try {
-                    val changed = store.subscriptionUrl != normalized
-                    store.subscriptionUrl = normalized
-                    if (changed) {
-                        // The timestamp belongs to the old URL. A newly saved
-                        // provider must be eligible for the next auto refresh.
-                        store.subscriptionUpdatedAt = 0L
-                    }
-                    dialog.dismiss()
-                    refreshSummaries()
-                    downloadSubscription(normalized, providerChanged = changed)
-                } catch (_: Exception) {
-                    editor.error = "订阅地址保存失败，请检查系统安全存储"
-                }
-            }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { commit() }
-        }
-        dialog.show()
+        if (!ParentSession.authorized()) { finish(); return }
+        startActivityForResult(
+            Intent(this, SubscriptionEditorActivity::class.java), REQUEST_SUBSCRIPTION
+        )
     }
 
     private fun downloadSubscription(url: String, providerChanged: Boolean = false) {
@@ -987,6 +983,18 @@ class SettingsActivity : Activity() {
     @Deprecated("Legacy storage document picker callback for Android TV 9")
     override fun onActivityResult(request: Int, code: Int, data: Intent?) {
         super.onActivityResult(request, code, data)
+        if (request == REQUEST_SUBSCRIPTION) {
+            if (code == RESULT_OK && ParentSession.authorized()) {
+                val url = store.subscriptionUrl
+                if (url.isNotBlank()) {
+                    showSection(SettingsDestination.NETWORK.ordinal)
+                    downloadSubscription(url, providerChanged = data?.getBooleanExtra(
+                        SubscriptionEditorActivity.EXTRA_PROVIDER_CHANGED, false
+                    ) == true)
+                }
+            }
+            return
+        }
         if (request == REQUEST_VPN_PERMISSION) {
             val permitted = ParentSession.externalUiAuthorized()
             ParentSession.endExternalUi()
@@ -1072,5 +1080,7 @@ class SettingsActivity : Activity() {
         const val EXTRA_SECTION = "open_section"
         private const val REQUEST_YAML = 918
         private const val REQUEST_VPN_PERMISSION = 919
+        private const val REQUEST_SUBSCRIPTION = 920
+        private const val SAVED_SECTION = "settings_section"
     }
 }
