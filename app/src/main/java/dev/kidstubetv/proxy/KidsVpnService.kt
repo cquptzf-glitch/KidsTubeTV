@@ -86,16 +86,19 @@ class KidsVpnService : VpnService() {
     private fun isCurrent(sessionId: Long): Boolean =
         sessions.current(sessionId)
 
+    /** Only our app enters the VPN; an empty allowlist would route all apps. */
+    private fun appOnlyBuilder(): Builder = Builder()
+        .setSession("KidsTubeTV")
+        .setMtu(core.tunMtu)
+        .addAddress(core.tunAddress, 30)
+        .addRoute("0.0.0.0", 0)
+        .addDnsServer(core.tunDns)
+        .addAllowedApplication(AppOnlyVpnScope.allowedPackage(packageName))
+
     private fun establishTun(sessionId: Long) {
         if (!isCurrent(sessionId)) return
         try {
-            val builder = Builder()
-                .setSession("KidsTubeTV")
-                .setMtu(core.tunMtu)
-                .addAddress(core.tunAddress, 30)
-                .addRoute("0.0.0.0", 0)
-                .addDnsServer(core.tunDns)
-                .addAllowedApplication(packageName)
+            val builder = appOnlyBuilder()
 
             val pfd = builder.establish() ?: error("System refused to establish VPN")
             // libmihomo-android owns this detached FD once startTun is called.
@@ -124,7 +127,7 @@ class KidsVpnService : VpnService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("KidsTubeTV proxy")
-            .setContentText("VPN is active only for KidsTubeTV")
+            .setContentText("Only KidsTubeTV uses this VPN")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentIntent(open)
             .setOngoing(true)

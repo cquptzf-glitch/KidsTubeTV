@@ -68,3 +68,10 @@ KidsApp (all-Activity background tracking, 6s grace)
 - `NativeTunCallbacks` 是可替换接口；老版 JNI 的 `protectSocket(Boolean)` 由 Service 检查，失败会结束 VPN，但旧版桥接仍无法把 Boolean 原样返回 Go。
 - `WatchProgressPolicy` 校验续播点，`WatchHistory` 限制数据条目并维护本地秒数，`PlayerActivity` 按间隔保存并在重新打开最近视频时续播。
 - `ParentUnlockTicket` 使用 `SystemClock.elapsedRealtime()` 而不是可手调的系统时间；连续 120 秒未交互后失效；`KidsApp` 所有活动后台化时立即调用 `ParentSession.lock()`。
+
+## 固定的应用专用 VPN 范围（2026-11-12）
+
+`KidsVpnService.appOnlyBuilder()` 在 `Builder.establish()` 前强制执行 `addAllowedApplication(AppOnlyVpnScope.allowedPackage(packageName))`，让 KidsTubeTV 当前包名（含 Preview 的 applicationId 后缀）成为唯一受 VPN 路由影响的应用。未加入的系统/第三方应用继续走设备默认网络。该列表不能为空，不能做「全设备代理」选项；本应用不改变系统代理设置。
+
+注意：`VpnService.prepare()` 的 Android 授权是系统层面的，同一时间通常不能并行运行两个 VPN，因此 KidsTubeTV 仍可能终止已连接的其它 VPN。Android 的锁定 VPN / Always-on 设置、IPv6 路由和各设备的实际网络表现必须真机验证。
+

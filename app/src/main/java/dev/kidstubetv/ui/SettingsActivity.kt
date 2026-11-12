@@ -82,6 +82,7 @@ class SettingsActivity : Activity() {
     private lateinit var childSummary: TextView
     private lateinit var accountSummary: TextView
     private lateinit var networkAdvanced: LinearLayout
+    private lateinit var subscriptionTile: SettingsActionTile
     private lateinit var subscriptionRefreshTile: SettingsActionTile
     private lateinit var yamlImportTile: SettingsActionTile
     private val sections = mutableListOf<LinearLayout>()
@@ -139,7 +140,7 @@ class SettingsActivity : Activity() {
             TvUi.space(rail, this, 34)
         }
 
-        listOf("儿童内容", "网络 VPN", "YouTube").forEachIndexed { index, title ->
+        listOf("儿童内容", "应用网络", "YouTube").forEachIndexed { index, title ->
             val button = Button(this).apply {
                 id = View.generateViewId()
                 text = if (handheld) title else "${index + 1}  " + title
@@ -251,7 +252,7 @@ class SettingsActivity : Activity() {
 
     private fun showSection(index: Int, moveFocus: Boolean = false) {
         selectedSection = index
-        pageTitle.text = listOf("儿童内容", "网络与 VPN", "YouTube 账号")[index]
+        pageTitle.text = listOf("儿童内容", "应用网络", "YouTube 账号")[index]
         sections.forEachIndexed { i, panel ->
             panel.visibility = if (i == index) View.VISIBLE else View.GONE
         }
@@ -352,7 +353,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun buildNetworkSection(panel: LinearLayout) {
-        heading(panel, "VPN 与网络", "先连接网络，再浏览儿童视频。常用操作保留在当前屏幕。")
+        heading(panel, "仅本应用使用网络代理", "第一次添加订阅并连接，之后打开 KidsTubeTV 会自动连接。")
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(TvUi.dp(this@SettingsActivity, 18), TvUi.dp(this@SettingsActivity, 12),
@@ -364,68 +365,78 @@ class SettingsActivity : Activity() {
         statusCard.addView(networkState)
         statusCard.addView(networkDetail)
         panel.addView(statusCard)
-        TvUi.space(panel, this, 14)
+        TvUi.space(panel, this, 12)
 
-        vpnTile = action(panel, "连接 VPN", "首次连接会出现 Android 系统 VPN 授权", true) {
+        panel.addView(TvUi.label(this,
+            "✓ 只代理 KidsTubeTV，其他应用继续使用原来的网络。" +
+                "\nAndroid 同时通常只能启用一个 VPN，启动本应用可能断开其他 VPN。", 14f)
+            .apply { setTextColor(TvUi.muted) })
+        TvUi.space(panel, this, 12)
+
+        vpnTile = action(panel, "连接应用网络", "首次连接需要同意系统 VPN 授权", true) {
             connectOrTestVpn()
         }
-        action(panel, "Clash 订阅地址 · 查看 / 编辑 / 复制",
-            "解锁家长设置后可直接查看完整链接，保存后可立即更新") {
+        subscriptionTile = action(panel, "添加或更换订阅", "粘贴订阅链接，自动下载配置") {
             editSubscription()
         }
-        subscriptionRefreshTile = action(panel, "↻ 更新已保存的订阅",
-            "一键重新下载 Clash YAML，失败时保留已有配置") {
-            val url = store.subscriptionUrl
-            if (url.isBlank()) editSubscription() else downloadSubscription(url)
-        }
-        yamlImportTile = action(panel, "从文件导入 Clash YAML（备用）",
-            "订阅链接访问失败时，选择手机“下载”目录或 U 盘中的 YAML 文件") {
-            importYaml()
-        }
-        action(panel, "一键检测网络与账号", "诊断 VPN、Google HTTPS 和 YouTube API") {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        }
-        TvUi.space(panel, this, 8)
+
         networkAdvanced = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
         }
-        expandButton(panel, "更多网络设置", networkAdvanced)
+        expandButton(panel, "更多设置与故障排查", networkAdvanced)
         panel.addView(networkAdvanced)
-        action(networkAdvanced, "选择代理节点", "订阅默认策略无法使用时再手动选择") {
+
+        subscriptionRefreshTile = action(networkAdvanced, "重新下载订阅",
+            "订阅失效或节点列表未更新时使用") {
+            val url = store.subscriptionUrl
+            if (url.isBlank()) editSubscription() else downloadSubscription(url)
+        }
+        yamlImportTile = action(networkAdvanced, "从文件导入配置（备用）",
+            "无法下载订阅时，可从手机下载目录或 U 盘导入 YAML") {
+            importYaml()
+        }
+        action(networkAdvanced, "选择连接节点", "默认自动选择；只有连接异常时才需要更换") {
             startActivity(Intent(this, ProxyActivity::class.java))
         }
-        action(networkAdvanced, "手动重启 VPN", "配置更换后可重新建立隧道") {
+        action(networkAdvanced, "检测连接问题", "检查 Google 网络、YouTube 账号及诊断信息") {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        action(networkAdvanced, "重启应用网络", "新配置会在重连后生效") {
             restartVpnFromParent()
         }
-        action(networkAdvanced, "订阅自动更新周期", "关闭自动更新或设置更新间隔") { chooseRefreshInterval() }
-        action(networkAdvanced, "恢复上一次代理配置", "当前连接断开后可恢复本机备份") {
+        action(networkAdvanced, "订阅更新周期", "默认自动更新，需要时再调整") { chooseRefreshInterval() }
+        action(networkAdvanced, "恢复上一次配置", "恢复前先断开本应用 VPN") {
             if (ProxyStatus.phase == ProxyStatus.Phase.READY ||
                 ProxyStatus.phase == ProxyStatus.Phase.STARTING) {
-                networkDetail.text = "请先关闭 VPN，再恢复之前的配置"
+                networkDetail.text = "请先断开应用网络，再恢复旧配置"
             } else if (!store.hasBackupProfile) {
                 networkDetail.text = "没有可以恢复的上一版配置"
             } else {
                 AlertDialog.Builder(this)
-                    .setTitle("恢复上一版 Clash 配置")
-                    .setMessage("将当前配置替换成之前备份的 YAML，之后需要重新连接 VPN。")
+                    .setTitle("恢复上一次配置")
+                    .setMessage("恢复此前保存的配置，下次连接时生效。")
                     .setNegativeButton("取消", null)
                     .setPositiveButton("恢复") { _, _ ->
                         val ok = store.restoreBackup()
-                        networkState.text = if (ok) "✓ 已恢复上一版代理配置" else "⚠ 恢复失败"
-                        networkDetail.text = if (ok) "重新连接 VPN 以生效" else "文件恢复失败"
+                        networkState.text = if (ok) "✓ 配置已恢复" else "⚠ 恢复失败"
+                        networkDetail.text = if (ok) "请重新连接应用网络" else "无法恢复之前的配置"
                     }.show()
             }
         }
-        action(networkAdvanced, "断开 VPN", "手动暂停，不会在后台自动重新连接") {
+        action(networkAdvanced, "暂停应用网络", "手动暂停后不自动重连；不会更改其他应用的网络") {
             VpnManualPause.pause()
             uiHandler.removeCallbacks(startVpnAfterStop)
             KidsVpnService.stop(this)
-            networkState.text = "家长已暂停 VPN"
+            networkState.text = "家长已暂停应用网络"
         }
     }
 
     private fun connectOrTestVpn() {
+        if (!store.hasProfile) {
+            editSubscription()
+            return
+        }
         when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> {
                 networkState.text = "正在检测 Google HTTPS…"
@@ -438,7 +449,7 @@ class SettingsActivity : Activity() {
 
     private fun restartVpnFromParent() {
         if (!store.hasProfile) {
-            networkDetail.text = "请先添加 Clash 订阅或从 U 盘导入配置"
+            networkDetail.text = "请先添加订阅链接；下载失败可在更多设置中导入文件"
             return
         }
         VpnManualPause.resume()
@@ -509,8 +520,8 @@ class SettingsActivity : Activity() {
         )
         setupTile.setTitle(when (step) {
             SetupFlowPolicy.Step.PIN -> "1 / 5  设置家长 PIN"
-            SetupFlowPolicy.Step.PROFILE -> "2 / 5  添加 Clash 订阅"
-            SetupFlowPolicy.Step.VPN -> "3 / 5  连接 VPN"
+            SetupFlowPolicy.Step.PROFILE -> "2 / 5  添加网络订阅"
+            SetupFlowPolicy.Step.VPN -> "3 / 5  连接应用网络"
             SetupFlowPolicy.Step.AUTH -> "4 / 5  配置 YouTube"
             SetupFlowPolicy.Step.APPROVAL -> "5 / 5  添加允许的频道"
             SetupFlowPolicy.Step.COMPLETE -> "✓ 配置完成 · 返回儿童首页"
@@ -518,7 +529,7 @@ class SettingsActivity : Activity() {
         setupTile.setSubtitle(when (step) {
             SetupFlowPolicy.Step.PIN -> "创建家长密码，保护敏感设置"
             SetupFlowPolicy.Step.PROFILE -> "复制 HTTPS 订阅链接后轻触这里"
-            SetupFlowPolicy.Step.VPN -> "申请系统 VPN 权限并建立连接"
+            SetupFlowPolicy.Step.VPN -> "仅 KidsTubeTV 使用 VPN，其他应用仍使用原网络"
             SetupFlowPolicy.Step.AUTH -> "Google 手机授权或直接输入 API Key"
             SetupFlowPolicy.Step.APPROVAL -> "粘贴频道链接，只允许儿童视频播放"
             SetupFlowPolicy.Step.COMPLETE -> "网络、内容审核和家长设置已齐备"
@@ -545,8 +556,8 @@ class SettingsActivity : Activity() {
         val host = runCatching { URI(store.subscriptionUrl).host }.getOrNull()
         val source = when {
             store.hasProfile && host != null -> "订阅来源：" + host
-            store.hasProfile -> "已导入本地 Clash 配置"
-            else -> "未配置代理；先添加 Clash 订阅或从 U 盘导入"
+            store.hasProfile -> "已导入本地网络配置"
+            else -> "尚未添加订阅；完成后可自动连接应用网络"
         }
         val time = if (store.subscriptionUpdatedAt > 0) {
             " · 更新于 " + DateFormat.getDateTimeInstance().format(Date(store.subscriptionUpdatedAt))
@@ -561,13 +572,19 @@ class SettingsActivity : Activity() {
             }
         subscriptionRefreshTile.visibility =
             if (store.subscriptionUrl.isBlank()) View.GONE else View.VISIBLE
-        yamlImportTile.visibility =
-            if (!store.hasProfile || store.subscriptionUpdateIssue.isNotBlank())
-                View.VISIBLE else View.GONE
+        subscriptionTile.setTitle(if (store.subscriptionUrl.isBlank())
+            "添加网络订阅" else "更换网络订阅")
+        subscriptionTile.setSubtitle(if (store.subscriptionUrl.isBlank())
+            "粘贴 HTTPS 订阅链接，保存后自动下载" else "当前订阅已保存，可查看、复制或更换")
         vpnTile.setTitle(when (ProxyStatus.phase) {
-            ProxyStatus.Phase.READY -> "检测 VPN 网络"
-            ProxyStatus.Phase.STARTING -> "VPN 正在连接"
-            else -> "连接 VPN"
+            ProxyStatus.Phase.READY -> "检测应用网络"
+            ProxyStatus.Phase.STARTING -> "正在连接应用网络…"
+            else -> if (store.hasProfile) "连接应用网络" else "先添加订阅"
+        })
+        vpnTile.setSubtitle(when (ProxyStatus.phase) {
+            ProxyStatus.Phase.READY -> "仅 KidsTubeTV 走 VPN，点击检测连通性"
+            ProxyStatus.Phase.STARTING -> "正在准备应用专属网络，不影响其他应用路由"
+            else -> if (store.hasProfile) "仅 KidsTubeTV 使用 VPN，点击连接" else "点击后直接填写订阅链接"
         })
         accountSummary.text = if (GoogleTvAuth(this).isLinked) "Google 已授权（只读 YouTube 资料）"
             else "未登录 Google；也可使用 YouTube API Key 浏览"
@@ -791,14 +808,13 @@ class SettingsActivity : Activity() {
         row.addView(paste, LinearLayout.LayoutParams(0, -2, 1f))
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("管理 Clash 订阅")
+            .setTitle("设置应用网络订阅")
             .setView(panel)
             .setNegativeButton("取消", null)
-            .setNeutralButton("仅保存地址", null)
-            .setPositiveButton("保存并更新", null)
+            .setPositiveButton("保存并下载", null)
             .create()
         dialog.setOnShowListener {
-            fun commit(shouldDownload: Boolean) {
+            fun commit() {
                 val normalized = try {
                     SubscriptionFormat.normalizeUrl(editor.text.toString())
                 } catch (_: Exception) {
@@ -815,17 +831,12 @@ class SettingsActivity : Activity() {
                     }
                     dialog.dismiss()
                     refreshSummaries()
-                    if (shouldDownload) downloadSubscription(normalized, providerChanged = changed)
-                    else {
-                        networkState.text = "✓ 已保存订阅地址"
-                        networkDetail.text = "链接已加密保存，原有 VPN 配置不变；需要时点“更新已保存的订阅”"
-                    }
+                    downloadSubscription(normalized, providerChanged = changed)
                 } catch (_: Exception) {
                     editor.error = "订阅地址保存失败，请检查系统安全存储"
                 }
             }
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { commit(false) }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { commit(true) }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { commit() }
         }
         dialog.show()
     }
@@ -865,13 +876,19 @@ class SettingsActivity : Activity() {
                 result.onSuccess {
                     networkState.text = "✓ 订阅下载并校验成功"
                     networkDetail.text = "配置已保存，可在下次连接 VPN 时生效"
-                    if (ProxyStatus.phase == ProxyStatus.Phase.READY && ParentSession.authorized()) {
+                    if (ParentSession.authorized() &&
+                        ProxyStatus.phase == ProxyStatus.Phase.READY) {
                         AlertDialog.Builder(this)
-                            .setTitle("应用新 Clash 配置？")
-                            .setMessage("新订阅已下载成功。重新连接 VPN 后会使用新配置。")
+                            .setTitle("使用更新后的配置？")
+                            .setMessage("新订阅已下载成功，重新连接后生效。")
                             .setNegativeButton("稍后", null)
-                            .setPositiveButton("立即应用") { _, _ -> restartVpnFromParent() }
+                            .setPositiveButton("立即连接") { _, _ -> restartVpnFromParent() }
                             .show()
+                    } else if (ParentSession.authorized() &&
+                        !VpnManualPause.isPaused &&
+                        ProxyStatus.phase != ProxyStatus.Phase.STARTING) {
+                        // First-time configuration: skip a second remote click.
+                        requestVpnFromParent()
                     }
                 }.onFailure {
                     networkState.text = "⚠ 订阅更新失败"

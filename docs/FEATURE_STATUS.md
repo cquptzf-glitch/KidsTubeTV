@@ -9,6 +9,13 @@
 - **适配器：** `proxy/LibMihomoCore.kt` 和 `proxy/LibMihomoProxyControl.kt` 位于 `src/main/java`。Debug、Preview、Release 使用同一 JNI 后端，不再分双源码集。
 - **网络：** Android `VpnService` 建立应用专属 TUN；`Clash.quickSetup/startTUN/stopTun` 和 `Clash.invokeAction` 接口保持；保留节点选择、订阅 YAML 下载、配置缓存和回滚。
 
+## 2026-11-12：应用专用 VPN 及极简家长页
+
+- `KidsVpnService.appOnlyBuilder()` 使用 `AppOnlyVpnScope.allowedPackage(packageName)`，固定只添加当前应用包名，避免空 allowlist 导致全设备走 VPN；JVM 测试验证正式/预览包名和输入有效性。
+- 家长网络页由多项常驻操作改为 **「连接应用网络」和「添加/更换订阅」**；节点选择、更新、文件导入、诊断等隐藏在可展开高级区。
+- 首次保存链接后直接下载，成功后可以在家长 PIN 会话有效时请求系统 VPN 授权并建立连接；家长手动暂停期间不会自动重连。
+- **Android 平台限制：** 不在名单中的应用不走本 VPN，但系统 VPN 服务本身通常独占；打开 KidsTubeTV VPN 可能替换其他 VPN，且不代表已经做过真机 DNS/IPv6 防泄漏验证。
+
 ## 现有代码功能（仍需设备验收）
 
 | 领域 | 主要实现 | 静态验证边界 |
