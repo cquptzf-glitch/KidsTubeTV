@@ -5,15 +5,15 @@ on:
       version_name:
         description: 'Pre-release version (without v prefix)'
         required: true
-        default: '0.3.0-beta.10'
+        default: '0.3.0-beta.11'
       version_code:
         description: 'Increasing Android versionCode'
         required: true
-        default: '20'
+        default: '21'
       preview_suffix:
         description: 'Isolated package suffix when no private preview signer is configured'
         required: true
-        default: '.preview.b10'
+        default: '.preview.b11'
   # Allow a vetted version request committed directly to main to publish a
   # preview even when GitHub Actions workflow_dispatch is not API-accessible.
   push:
@@ -128,12 +128,22 @@ jobs:
       - name: Write preview release notes
         run: |
           cat > dist/release/RELEASE_NOTES.md <<'EOF'
-          # KidsTubeTV v0.3.0-beta.10 · Android TV / phone preview
+          # KidsTubeTV · Android TV / phone preview
 
           This preview is built directly from the latest main branch with
           the pinned **oviron/libmihomo-android v0.3.13** core, not FlClash.
 
-          ## What's new
+          ## Fixes in v0.3.0-beta.11
+          - Parent PIN no longer expires immediately on short app switches:
+            up to 3 minutes of background grace, then the normal 2-minute idle limit.
+          - Subscription downloads try FlClash, ClashMetaForAndroid, clash.meta
+            and clash identifiers when providers return incompatible formats.
+          - First-subscription failures display a direct local YAML import option.
+          - Subscription tokens are not embedded in this release or its tests.
+          - Download may still require local YAML bootstrap when provider access
+            is blocked before the app-only VPN is connected.
+
+          ## Previously introduced
           - Redesigned parent settings for TV remotes and phone touch controls:
             overview, app network, YouTube, child content and parent security.
           - Unified the Google device-code login, node selector and diagnostics pages.
