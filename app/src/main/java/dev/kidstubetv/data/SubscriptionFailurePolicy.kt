@@ -44,7 +44,7 @@ object SubscriptionFailurePolicy {
             SubscriptionProblem.BASE64_RESPONSE ->
                 "返回的是 Base64/通用节点格式，请使用服务商的 Clash/Mihomo YAML 订阅"
             SubscriptionProblem.INVALID_YAML ->
-                "返回内容不是有效的 Clash/Mihomo YAML，请检查链接格式或服务商配置"
+                "服务商返回内容不是有效的 Clash/Mihomo YAML。已尝试常用客户端标识；可从 FlClash 导出 YAML 文件后在更多设置中导入"
             SubscriptionProblem.UNSAFE_PROFILE ->
                 "配置尝试开放局域网管理接口，出于安全原因拒绝导入"
             SubscriptionProblem.TOO_LARGE -> "配置文件超过 4 MiB，无法安全导入"

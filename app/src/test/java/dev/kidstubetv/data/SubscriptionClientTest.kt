@@ -39,7 +39,7 @@ class SubscriptionClientTest {
                 yaml.toByteArray()).also(connections::add)
         }
         assertEquals(yaml, downloader.fetch(link))
-        assertEquals(listOf("ClashMetaForAndroid", "clash"),
+        assertEquals(listOf("FlClash", "ClashMetaForAndroid"),
             connections.map { it.getRequestProperty("User-Agent") })
     }
 
@@ -53,7 +53,7 @@ class SubscriptionClientTest {
         val failure = assertThrows(SubscriptionDownloadException::class.java) {
             client.fetch(link)
         }
-        assertEquals(2, attempts)
+        assertEquals(SubscriptionRequestPolicy.userAgents.size, attempts)
         assertEquals(SubscriptionProblem.HTML_RESPONSE, failure.problem)
         assertTrue(!failure.message.orEmpty().contains("private"))
     }
@@ -80,6 +80,62 @@ class SubscriptionClientTest {
             client.fetch(link)
         }
         assertEquals(SubscriptionProblem.REDIRECT, error.problem)
+    }
+
+
+    @Test fun triesMoreClientIdentifiersWhenProviderReturnsInvalidYaml() {
+        val connections = mutableListOf<FakeConnection>()
+        val client = SubscriptionClient { url ->
+            FakeConnection(url,
+                200,
+                if (connections.size < 2) "{\"msg\":\"unsupported client\"}".toByteArray()
+                else yaml.toByteArray()
+            ).also(connections::add)
+        }
+        assertEquals(yaml, client.fetch(link))
+        assertEquals(
+            listOf("FlClash", "ClashMetaForAndroid", "clash.meta"),
+            connections.map { it.getRequestProperty("User-Agent") }
+        )
+    }
+
+    @Test fun doesNotRetryUnsafeProfileOrUnauthorizedToken() {
+        var attempts = 0
+        val unsafe = SubscriptionClient { url ->
+            attempts++
+            FakeConnection(url, 200,
+                "allow-lan: true\nproxies:\n  - name: direct\n    type: direct\n".toByteArray())
+        }
+        val rejected = assertThrows(SubscriptionDownloadException::class.java) {
+            unsafe.fetch(link)
+        }
+        assertEquals(SubscriptionProblem.UNSAFE_PROFILE, rejected.problem)
+        assertEquals(1, attempts)
+
+        var denied = 0
+        val blocked = SubscriptionClient { url ->
+            denied++
+            FakeConnection(url, 401)
+        }
+        val unauthorized = assertThrows(SubscriptionDownloadException::class.java) {
+            blocked.fetch(link)
+        }
+        assertEquals(SubscriptionProblem.HTTP, unauthorized.problem)
+        assertEquals(401, unauthorized.httpStatus)
+        assertEquals(1, denied)
+    }
+
+    @Test fun stopsOnRateLimitsWithoutRepeatedRequests() {
+        var attempts = 0
+        val downloader = SubscriptionClient { url ->
+            attempts++
+            FakeConnection(url, 429)
+        }
+        val rateLimited = assertThrows(SubscriptionDownloadException::class.java) {
+            downloader.fetch(link)
+        }
+        assertEquals(429, rateLimited.httpStatus)
+        assertEquals(1, attempts)
     }
 
     @Test fun rejectsOversizedDecompressedYaml() {

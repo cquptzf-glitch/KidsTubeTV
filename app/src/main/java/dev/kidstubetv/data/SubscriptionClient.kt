@@ -48,13 +48,14 @@ class SubscriptionClient(
     }
 ) {
     /**
-     * Some providers choose YAML vs HTML/Base64 from the User-Agent.
-     * Try only two common Clash client IDs, and retry ONLY on a response
-     * proven to be the wrong format or a UA-related HTTP refusal.
+     * Some providers pick a subscription format based on User-Agent and may
+     * return HTML, JSON or Base64 to unknown clients. Retry only format
+     * incompatibilities and explicit UA-related HTTP refusal. Never retry
+     * network errors, expired tokens, unsafe profiles or rate limits.
      */
     fun fetch(input: String): String {
         val normalized = SubscriptionFormat.normalizeUrl(input)
-        val agents = listOf("ClashMetaForAndroid", "clash")
+        val agents = SubscriptionRequestPolicy.userAgents
         for ((index, agent) in agents.withIndex()) {
             try {
                 return download(normalized, agent)

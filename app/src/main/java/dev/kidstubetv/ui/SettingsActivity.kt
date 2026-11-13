@@ -85,6 +85,7 @@ class SettingsActivity : Activity() {
     private lateinit var subscriptionTile: SettingsActionTile
     private lateinit var subscriptionRefreshTile: SettingsActionTile
     private lateinit var yamlImportTile: SettingsActionTile
+    private lateinit var rescueImportTile: SettingsActionTile
     private val sections = mutableListOf<LinearLayout>()
     private val tabs = mutableListOf<Button>()
     private var selectedSection = 0
@@ -453,6 +454,13 @@ class SettingsActivity : Activity() {
         subscriptionTile = action(panel, "添加或更换订阅", "粘贴订阅链接，自动下载配置") {
             editSubscription()
         }
+        // Only surface the third action when downloading failed and no usable
+        // profile exists. FlClash may use an existing proxy for the very first
+        // subscription request; KidsTubeTV cannot do so before VPN bootstrap.
+        rescueImportTile = action(panel, "下载失败？导入本地 YAML",
+            "可从受信任的客户端导出 Clash/Mihomo YAML，用手机文件或电视 U 盘导入") {
+            importYaml()
+        }.apply { visibility = View.GONE }
 
         networkAdvanced = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -663,6 +671,8 @@ class SettingsActivity : Activity() {
             }
         subscriptionRefreshTile.visibility =
             if (store.subscriptionUrl.isBlank()) View.GONE else View.VISIBLE
+        rescueImportTile.visibility =
+            if (!store.hasProfile && subscriptionIssue.isNotBlank()) View.VISIBLE else View.GONE
         subscriptionTile.setTitle(if (store.subscriptionUrl.isBlank())
             "添加网络订阅" else "更换网络订阅")
         subscriptionTile.setSubtitle(if (store.subscriptionUrl.isBlank())

@@ -28,7 +28,17 @@ internal object SubscriptionResponsePolicy {
 
     fun retryWithClashUserAgent(error: SubscriptionDownloadException): Boolean =
         error.problem in setOf(
-            SubscriptionProblem.HTML_RESPONSE, SubscriptionProblem.BASE64_RESPONSE
+            SubscriptionProblem.HTML_RESPONSE,
+            SubscriptionProblem.BASE64_RESPONSE,
+            SubscriptionProblem.INVALID_YAML
         ) || (error.problem == SubscriptionProblem.HTTP &&
-            error.httpStatus in listOf(403, 406))
+            error.httpStatus in listOf(403, 406, 415))
+}
+
+/** Client IDs recognized by different Clash/Mihomo subscription panels. */
+internal object SubscriptionRequestPolicy {
+    // One trial per identifier; keep a stable ordering and no arbitrary headers.
+    val userAgents: List<String> = listOf(
+        "FlClash", "ClashMetaForAndroid", "clash.meta", "clash"
+    )
 }

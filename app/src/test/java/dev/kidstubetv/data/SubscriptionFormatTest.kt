@@ -10,6 +10,11 @@ class SubscriptionFormatTest {
             SubscriptionFormat.normalizeUrl("  https://example.com/sub?token=opaque "))
     }
 
+    @Test fun acceptsPanelApiSubscriptionWithOpaqueQueryToken() {
+        val raw = "https://panel.example.org/api/v1/client/subscribe?token=opaque-placeholder"
+        assertEquals(raw, SubscriptionFormat.normalizeUrl(raw))
+    }
+
     @Test fun rejectsHttpAndUserInfo() {
         assertThrows(IllegalArgumentException::class.java) {
             SubscriptionFormat.normalizeUrl("http://example.com/subscription")

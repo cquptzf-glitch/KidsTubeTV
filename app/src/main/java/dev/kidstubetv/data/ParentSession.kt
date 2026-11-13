@@ -12,5 +12,6 @@ object ParentSession {
     fun endExternalUi() = ticket.endExternalUi()
     fun externalUiAuthorized(): Boolean = ticket.externalUiAuthorized()
     fun onBackground() = ticket.onBackground()
+    fun onForeground() = ticket.onForeground()
     fun lock() = ticket.lock()
 }

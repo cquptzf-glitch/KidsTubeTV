@@ -1,5 +1,14 @@
 # Clash 订阅管理与更新失败排查（主线 libmihomo-android）
 
+## 2026-11-13 与 FlClash 的兼容性修复
+
+- 下载器依次使用 `FlClash`、`ClashMetaForAndroid`、`clash.meta`、`clash` 请求头，仅在 HTTP 403/406/415 或响应 HTML、Base64、无效 YAML 时尝试下一个客户端标识；HTTP 401（令牌错误）、429（限流）、网络超时及不安全配置不会重复尝试。
+- 对常见 HTTPS `/api/v1/client/subscribe?token=…` 订阅地址的语法校验仍支持，**不会把任何真实 token 写入测试、日志或仓库**。
+- 若在 KidsTubeTV 尚未建立 VPN 时网络无法访问该服务，而 FlClash 通过自身代理可以下载，需要先从服务商/可信客户端获取 Clash/Mihomo YAML，通过「下载失败？导入本地 YAML」或高级设置的文件导入功能使用。首次配置的启动循环无法靠更换 User-Agent 保证解决。
+- 若显示「服务器返回 Base64/通用节点格式」，说明返回的不是可直接加载的 Mihomo YAML。本版本不会自动执行不受信任的在线订阅转换服务；应从服务商获取 Clash/Mihomo 专用配置。
+- 若显示危险 `allow-lan` 或外部管理监听地址，会阻止导入，**不会为了兼容而开放电视局域网代理接口**。
+- 从手机切换出去复制订阅链接、3 分钟内返回设置页时不应再次输入 PIN；浏览器/系统授权跳转仍有更严格限时。
+
 ## 最简单的操作路径
 
 进入 KidsTubeTV 的 **☰ 菜单 → 家长设置（PIN）→ 网络 VPN**：

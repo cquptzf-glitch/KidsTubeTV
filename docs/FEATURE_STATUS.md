@@ -9,6 +9,14 @@
 - **适配器：** `proxy/LibMihomoCore.kt` 和 `proxy/LibMihomoProxyControl.kt` 位于 `src/main/java`。Debug、Preview、Release 使用同一 JNI 后端，不再分双源码集。
 - **网络：** Android `VpnService` 建立应用专属 TUN；`Clash.quickSetup/startTUN/stopTun` 和 `Clash.invokeAction` 接口保持；保留节点选择、订阅 YAML 下载、配置缓存和回滚。
 
+## 2026-11-13：PIN 后台宽限与订阅兼容
+
+- `ParentUnlockTicket` 新增有限后台授权（默认 180 秒）：离开后立即锁定的行为调整为短时间内保留，返回前不允许后台输入事件延长授权；回前台后重新启用 120 秒无操作超时。使用 `KidsApp.onActivityStarted` 恢复，显式锁定及进程重启仍失效。
+- 外部系统文件选择器和 OAuth 浏览器跳转仍只允许原授权剩余时间内有效，不利用后台宽限扩大授权。
+- `SubscriptionClient` 支持四种常见 FlClash/Mihomo 请求标识，对格式性拒绝有上限自动重试；危险 YAML 仍严格拒绝，失败不替换原配置。
+- 无配置且下载失败会显示本地 YAML 导入备用入口。若域名首次必须经过另一款 VPN 才可访问，仍需先用可信客户端导出 YAML 后导入引导；此限制不是 HTTP 兼容层能完全解决的。
+- 新增后台 PIN、User-Agent 兼容、拒绝危险配置及防无意义重复请求单测。未使用用户真实订阅 token 进行 CI 或在线请求。
+
 ## 2026-11-12：统一设置子页与异步状态
 
 - `SettingsDetailPage` 新增通用详情页壳：TV 居中固定最大宽度、手机触控单列、主操作焦点、折叠状态及大卡片样式。

@@ -30,6 +30,7 @@ class KidsApp : Application(), Application.ActivityLifecycleCallbacks {
         registerActivityLifecycleCallbacks(this)
     }
     override fun onActivityStarted(activity: Activity) {
+        if (activeScreens == 0) ParentSession.onForeground()
         activeScreens++
         handler.removeCallbacks(disconnect)
     }

@@ -29,7 +29,7 @@ class SubscriptionResponsePolicyTest {
     }
 
     @Test fun retriesOnlyLikelyClientFormatRefusals() {
-        listOf(403, 406).forEach {
+        listOf(403, 406, 415).forEach {
             assertTrue(SubscriptionResponsePolicy.retryWithClashUserAgent(
                 SubscriptionDownloadException(SubscriptionProblem.HTTP, it)
             ))
@@ -38,5 +38,9 @@ class SubscriptionResponsePolicyTest {
             SubscriptionDownloadException(SubscriptionProblem.HTTP, 401)))
         assertTrue(!SubscriptionResponsePolicy.retryWithClashUserAgent(
             SubscriptionDownloadException(SubscriptionProblem.HTTP, 429)))
+        assertTrue(SubscriptionResponsePolicy.retryWithClashUserAgent(
+            SubscriptionDownloadException(SubscriptionProblem.INVALID_YAML)))
+        assertTrue(!SubscriptionResponsePolicy.retryWithClashUserAgent(
+            SubscriptionDownloadException(SubscriptionProblem.UNSAFE_PROFILE)))
     }
 }
