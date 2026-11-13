@@ -9,6 +9,15 @@
 - **适配器：** `proxy/LibMihomoCore.kt` 和 `proxy/LibMihomoProxyControl.kt` 位于 `src/main/java`。Debug、Preview、Release 使用同一 JNI 后端，不再分双源码集。
 - **网络：** Android `VpnService` 建立应用专属 TUN；`Clash.quickSetup/startTUN/stopTun` 和 `Clash.invokeAction` 接口保持；保留节点选择、订阅 YAML 下载、配置缓存和回滚。
 
+## 2026-11-13：订阅下载实际链路验证
+
+- 新增 `data/SubscriptionProbe.kt`：复用正式 `SubscriptionClient.fetch` 下载和 YAML 安全校验，不写配置文件，返回长度/状态或经 `SubscriptionFailurePolicy` 脱敏的错误类型。
+- `SettingsActivity` 在高级网络设置增加家长主动触发的订阅测试，后台或订阅发生修改后丢弃过期检查结果；不会记录原始响应和带 token 链接。
+- `SubscriptionProbeTest` 用内存 HTTP 模拟响应验证协议、查询字符串、FlClash 请求头、HTTP 错误、DNS 和 Base64 处理。
+- `SubscriptionLiveTest` 仅在用户通过环境变量提供私人地址时真实运行下载；CI 默认为跳过，不能声称已实测私人服务商。
+- 提供 `scripts/test-subscription.ps1` 安全输入脚本；本执行环境所有公共域名均 DNS 解析失败，真实服务商可达性需通过用户机器或 Android 设备验证。
+
+
 ## 2026-11-13：PIN 后台宽限与订阅兼容
 
 - `ParentUnlockTicket` 新增有限后台授权（默认 180 秒）：离开后立即锁定的行为调整为短时间内保留，返回前不允许后台输入事件延长授权；回前台后重新启用 120 秒无操作超时。使用 `KidsApp.onActivityStarted` 恢复，显式锁定及进程重启仍失效。

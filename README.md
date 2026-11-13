@@ -20,6 +20,13 @@
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
 - **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建使用固定 `libmihomo-android` 的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
+## 2026-11-13 订阅兼容性回归与真实网络验证
+
+- 新增 **使用现有 `SubscriptionClient.fetch` 的模拟 HTTP 回归测试**，覆盖类似 V2Board 的 `/api/v1/client/subscribe?token=…` 路径、FlClash 请求头、401/403、DNS 错误和 Base64 返回。源码与 CI 不包含私人 token。
+- 新增可选 `SubscriptionLiveTest`，只从 `KIDSTUBE_TEST_SUBSCRIPTION_URL` 环境变量读取真实 HTTPS 订阅地址；CI 未提供此变量时会跳过真实网络测试，不把跳过误当作已经测通。
+- Windows 可运行 `powershell -ExecutionPolicy Bypass -File scripts/test-subscription.ps1`，交互式隐藏输入订阅地址，执行同一 Kotlin 下载器测试，不会把 token 拼进命令行。
+- 手机上的 **家长设置 → 应用网络 → 更多设置与故障排查 → 测试订阅是否可用（不保存）** 可直接在设备网络上检测，只返回脱敏结果，不替换已安装 YAML。详细步骤：[订阅排查与真实联网测试](docs/SUBSCRIPTION_TROUBLESHOOTING.md)。
+
 ## 2026-11-13 PIN 后台切换与 Clash 订阅兼容性修复
 
 - **家长 PIN：** 解决短暂 HOME / 切换应用就重新要求 PIN 的问题。临时后台有最长 3 分钟宽限；回到应用后恢复原来 2 分钟无操作过期机制。系统文件选择器 / OAuth 浏览器的授权仍受到原先更短的授权上限保护，主动锁定或进程重启不保留 PIN 状态。

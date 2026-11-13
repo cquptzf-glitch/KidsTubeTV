@@ -31,6 +31,7 @@ import dev.kidstubetv.data.GoogleTvAuth
 import dev.kidstubetv.data.ParentSession
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
+import dev.kidstubetv.data.SubscriptionProbe
 import dev.kidstubetv.data.SubscriptionFormat
 import dev.kidstubetv.data.SubscriptionFailurePolicy
 import dev.kidstubetv.data.WatchHistory
@@ -96,6 +97,8 @@ class SettingsActivity : Activity() {
     private lateinit var vpnTile: SettingsActionTile
     private val uiHandler = Handler(Looper.getMainLooper())
     private var screenStarted = false
+    private val subscriptionProbeRequests = LatestResultGate()
+    private var subscriptionProbeRunning = false
     private val startVpnAfterStop = Runnable {
         if (!isFinishing && !isDestroyed && ParentSession.authorized()) requestVpnFromParent()
     }
@@ -255,6 +258,8 @@ class SettingsActivity : Activity() {
 
     override fun onStop() {
         screenStarted = false
+        subscriptionProbeRequests.invalidate()
+        subscriptionProbeRunning = false
         unregisterReceiver(statusReceiver)
         uiHandler.removeCallbacks(startVpnAfterStop)
         super.onStop()
@@ -473,6 +478,10 @@ class SettingsActivity : Activity() {
             "订阅失效或节点列表未更新时使用") {
             val url = store.subscriptionUrl
             if (url.isBlank()) editSubscription() else downloadSubscription(url)
+        }
+        action(networkAdvanced, "测试订阅是否可用（不保存）",
+            "使用与实际更新相同的 HTTPS 下载和 YAML 校验，不会替换现有配置") {
+            testSubscriptionWithoutSaving()
         }
         yamlImportTile = action(networkAdvanced, "从文件导入配置（备用）",
             "无法下载订阅时，可从手机下载目录或 U 盘导入 YAML") {
@@ -848,6 +857,37 @@ class SettingsActivity : Activity() {
         startActivityForResult(
             Intent(this, SubscriptionEditorActivity::class.java), REQUEST_SUBSCRIPTION
         )
+    }
+
+    /** Same downloader as normal updates; no URL, token or YAML in UI output. */
+    private fun testSubscriptionWithoutSaving() {
+        if (!ParentSession.authorized()) return
+        val url = store.subscriptionUrl
+        if (url.isBlank()) {
+            networkDetail.text = "请先添加并保存 HTTPS 订阅地址"
+            return
+        }
+        if (subscriptionProbeRunning) {
+            networkDetail.text = "订阅检测进行中，请勿重复点击"
+            return
+        }
+        subscriptionProbeRunning = true
+        val request = subscriptionProbeRequests.begin()
+        val vpnReady = ProxyStatus.phase == ProxyStatus.Phase.READY
+        networkState.text = "◌ 正在检测订阅…"
+        networkDetail.text = "仅检测 HTTPS 下载与 Clash YAML 格式，不会改动已有配置"
+        Thread({
+            val result = SubscriptionProbe().check(url, vpnReady)
+            runOnUiThread {
+                if (isFinishing || isDestroyed || !screenStarted ||
+                    !ParentSession.authorized() || store.subscriptionUrl != url ||
+                    !subscriptionProbeRequests.isCurrent(request)) return@runOnUiThread
+                subscriptionProbeRunning = false
+                networkState.text = if (result.successful)
+                    "✓ 订阅接口与 YAML 校验通过" else "⚠ 订阅检测失败"
+                networkDetail.text = result.message
+            }
+        }, "kids-subscription-probe").start()
     }
 
     private fun downloadSubscription(url: String, providerChanged: Boolean = false) {

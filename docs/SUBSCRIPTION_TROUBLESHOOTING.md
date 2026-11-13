@@ -1,5 +1,35 @@
 # Clash 订阅管理与更新失败排查（主线 libmihomo-android）
 
+## 2026-11-13 真实订阅验证（不泄漏令牌）
+
+**为什么需要在设备上测试？** 当前执行环境的 DNS 同时无法解析普通公共域名与目标订阅域名，因此返回 `curl: (6) Could not resolve host`，这个结果不能证明服务商或 KidsTubeTV 设备上的订阅不可用。
+
+**最直接：在 Android 手机或电视上运行 App 自检。**
+
+1. 进入「家长设置 → 应用网络」，把 HTTPS 订阅地址保存在加密的设置中。
+2. 展开「更多设置与故障排查」，选择 **「测试订阅是否可用（不保存）」**。
+3. 该入口使用和正常更新相同的 `SubscriptionClient().fetch(url)`、HTTP 请求头、跳转限制、GZIP 解码和 YAML 安全校验，但**不会写入文件或修改 VPN 配置**。
+4. 成功提示只显示 YAML 下载/验证成功及字节数；失败只显示脱敏的 DNS、TLS、HTTP 状态或格式问题。不显示原始网址、订阅 token、节点信息或原始报错正文。
+5. 若仍出现 DNS 错误，请比较同设备关闭和打开 FlClash VPN 时能否访问订阅地址。首次 KidsTubeTV VPN 未建立时，它没有任何现成代理可用于订阅引导。
+
+**Windows 上使用真正的 Kotlin 下载器测试（非 curl）：**
+
+```powershell
+# 在仓库根目录执行；需先完成 Android/Gradle 开发环境设置。
+# 脚本会以隐藏输入方式读取链接，不写入 git、文件或命令历史。
+powershell -ExecutionPolicy Bypass -File scripts/test-subscription.ps1
+```
+
+脚本读取订阅至本进程的临时 `KIDSTUBE_TEST_SUBSCRIPTION_URL` 环境变量，运行 `SubscriptionLiveTest`，完成后立即清除该变量。不要在 GitHub Issue、CI 日志、截图、命令参数中粘贴真实 token。
+
+`SubscriptionProbeTest` 提供无网络的模拟响应测试：客户端标识、请求头、完整查询参数、状态码、异常脱敏和不接受 Base64 内容。运行：
+
+```bash
+gradle --no-daemon :app:testDebugUnitTest --tests '*SubscriptionProbeTest'
+```
+
+**判定边界：** 测试通过意味着指定网络里 HTTPS 订阅响应通过 Clash YAML 校验；并不证明 libmihomo JNI、TUN、DNS、Google OAuth 或 YouTube 播放一定可用。失败结果只需提供脱敏状态文字，不要分享完整链接。
+
 ## 2026-11-13 与 FlClash 的兼容性修复
 
 - 下载器依次使用 `FlClash`、`ClashMetaForAndroid`、`clash.meta`、`clash` 请求头，仅在 HTTP 403/406/415 或响应 HTML、Base64、无效 YAML 时尝试下一个客户端标识；HTTP 401（令牌错误）、429（限流）、网络超时及不安全配置不会重复尝试。
