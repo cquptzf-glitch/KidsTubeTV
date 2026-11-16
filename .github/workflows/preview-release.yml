@@ -5,15 +5,15 @@ on:
       version_name:
         description: 'Pre-release version (without v prefix)'
         required: true
-        default: '0.3.0-beta.11'
+        default: '0.3.0-beta.12'
       version_code:
         description: 'Increasing Android versionCode'
         required: true
-        default: '21'
+        default: '22'
       preview_suffix:
         description: 'Isolated package suffix when no private preview signer is configured'
         required: true
-        default: '.preview.b11'
+        default: '.preview.b12'
   # Allow a vetted version request committed directly to main to publish a
   # preview even when GitHub Actions workflow_dispatch is not API-accessible.
   push:
@@ -133,15 +133,29 @@ jobs:
           This preview is built directly from the latest main branch with
           the pinned **oviron/libmihomo-android v0.3.13** core, not FlClash.
 
-          ## Fixes in v0.3.0-beta.11
-          - Parent PIN no longer expires immediately on short app switches:
-            up to 3 minutes of background grace, then the normal 2-minute idle limit.
-          - Subscription downloads try FlClash, ClashMetaForAndroid, clash.meta
-            and clash identifiers when providers return incompatible formats.
-          - First-subscription failures display a direct local YAML import option.
-          - Subscription tokens are not embedded in this release or its tests.
-          - Download may still require local YAML bootstrap when provider access
-            is blocked before the app-only VPN is connected.
+          ## Fixes in v0.3.0-beta.12
+          - Fix online Clash subscription ingestion: normalize Clash/Mihomo YAML,
+            common Base64 share-link lists, VLESS, VMess, Shadowsocks, Trojan,
+            Hysteria2 and supported SIP008 JSON into a loadable YAML profile.
+          - Accept FlClash desktop-exported YAML after safely disabling
+            LAN exposure, remote controller and unused inbound proxy ports.
+          - Before saving a manual/imported/auto-updated profile, run the pinned
+            Mihomo core in an isolated validator process; failures preserve
+            the previous profile and show a credential-free error category.
+          - Improve Android document picker authorization and failure feedback.
+          - Include the approved dense V2 parent settings with direct subscription,
+            YAML import, node selection and diagnostics on the same network page.
+          - Rebuild JVM regression tests for Base64, reality, format compatibility,
+            desktop safety and error privacy.
+
+          ## Verification and compatibility limits
+          - CI confirms Kotlin build, Lint, JVM tests and signed APK integrity.
+            Your private provider, device DNS/VPN startup and YouTube playback
+            are NOT verified by this workflow.
+          - An unsupported share-link protocol or transport may still require
+            exporting a full Mihomo YAML profile from FlClash.
+          - A provider blocked by the device's direct network may require local
+            YAML bootstrap, because the app's VPN is not available before setup.
 
           ## Previously introduced
           - Redesigned parent settings for TV remotes and phone touch controls:
