@@ -30,6 +30,18 @@ class KidsVpnService : VpnService() {
     }
     private val core: NativeProxyCore = NativeCoreFactory.create()
     private val main = Handler(Looper.getMainLooper())
+    // The previous implementation updated subscriptions only once on VPN start,
+    // so a 6h/24h UI setting never fired during a long-running connection.
+    private val subscriptionPoll = object : Runnable {
+        override fun run() {
+            if (SubscriptionRefreshSchedule.shouldPoll(
+                    ProxyStatus.phase == ProxyStatus.Phase.READY, sessions.isActive()
+                )) {
+                SubscriptionUpdater.updateIfDue(applicationContext)
+                main.postDelayed(this, SubscriptionRefreshSchedule.POLL_INTERVAL_MS)
+            }
+        }
+    }
     private var tunStarted = false
     private var tunAttempted = false
     private var failed = false
@@ -112,8 +124,10 @@ class KidsVpnService : VpnService() {
             tunStarted = true
             ProxyStatus.update(this, ProxyStatus.Phase.READY, "VPN_TUN_ESTABLISHED：隧道启动成功，等待接口检测")
             ProxyNetworkHealth.check(applicationContext)
-            // Update only after the app-only VPN exists. New YAML takes effect next start.
-            SubscriptionUpdater.updateIfDue(applicationContext)
+            // Check immediately, then keep checking while this VPN remains
+            // active. Installed YAML takes effect on the next VPN start.
+            main.removeCallbacks(subscriptionPoll)
+            main.post(subscriptionPoll)
         } catch (error: Throwable) {
             fail(VpnFailurePolicy.fromException(error, "TUN"), sessionId)
         }
@@ -143,6 +157,7 @@ class KidsVpnService : VpnService() {
     }
 
     private fun stopNow() {
+        main.removeCallbacks(subscriptionPoll)
         if (!sessions.stop()) {
             stopSelf()
             return

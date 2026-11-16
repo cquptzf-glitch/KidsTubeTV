@@ -23,8 +23,10 @@ jobs:
           SDK_MANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDK_MANAGER" --licenses >/dev/null || true
           "$SDK_MANAGER" --install "platforms;android-36" "build-tools;36.0.0"
-      - name: Static syntax check
-        run: bash -n scripts/fetch-mihomo.sh
+      - name: Static syntax and UI action wiring checks
+        run: |
+          bash -n scripts/fetch-mihomo.sh
+          python3 scripts/check-ui-wiring.py
       - name: Download and verify pinned libmihomo AAR
         run: bash scripts/fetch-mihomo.sh
       - name: Lint, test and compile

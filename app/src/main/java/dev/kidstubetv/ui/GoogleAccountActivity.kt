@@ -353,7 +353,9 @@ class GoogleAccountActivity : Activity() {
                         showSubscriptionPicker(channels, request, authRevision)
                     }
                 }.onFailure {
-                    status.text = "读取失败：" + (it.message ?: "检查网络或账号")
+                    // HTTP / OAuth exception strings may contain private URLs
+                    // or provider details; never print raw Throwable in parent UI.
+                    status.text = "读取订阅频道失败：请检查 VPN、Google 授权和接口配额"
                 }
             }
         }, "google-subscriptions").start()

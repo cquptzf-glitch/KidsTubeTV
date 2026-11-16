@@ -64,6 +64,9 @@ class YouTubeRepository(private val settings: SettingsStore) {
         val data = get("videos", mapOf("part" to "snippet,status", "id" to id))
         val item = data.optJSONArray("items")?.optJSONObject(0)
             ?: error("找不到该 YouTube 视频")
+        require(item.optString("id") == id) {
+            "YouTube API 返回的视频 ID 与请求不一致，无法批准"
+        }
         val snippet = item.optJSONObject("snippet") ?: error("视频缺少频道信息")
         val status = item.optJSONObject("status") ?: error("无法验证视频儿童状态")
         require(status.optBoolean("madeForKids", false) &&
@@ -124,18 +127,11 @@ class YouTubeRepository(private val settings: SettingsStore) {
             val items = response.optJSONArray("items") ?: return@forEach
             for (i in 0 until items.length()) {
                 val obj = items.optJSONObject(i) ?: continue
-                val snippet = obj.optJSONObject("snippet") ?: continue
-                val status = obj.optJSONObject("status") ?: continue
-                val thumbnails = snippet.optJSONObject("thumbnails")
-                val thumb = (thumbnails?.optJSONObject("medium") ?: thumbnails?.optJSONObject("default"))
-                    ?.optString("url").orEmpty()
-                val video = KidVideo(obj.optString("id"), snippet.optString("title"),
-                    snippet.optString("channelId"), snippet.optString("channelTitle"), thumb)
-                if (AdmissionPolicy.allows(video, status.optBoolean("madeForKids", false),
-                        status.optBoolean("embeddable", false),
-                        settings.allowedChannels, settings.approvedVideoIds, settings.blockedVideoIds)) {
-                    verified[video.id] = video
-                }
+                val video = YouTubeVideoScreeningPolicy.accept(
+                    obj, settings.allowedChannels,
+                    settings.approvedVideoIds, settings.blockedVideoIds
+                )
+                if (video != null) verified[video.id] = video
             }
         }
         return validIds.mapNotNull(verified::get)

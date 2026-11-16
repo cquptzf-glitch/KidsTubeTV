@@ -9,6 +9,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.kidstubetv.data.ParentSession
 
 /**
  * Shared responsive detail-page shell for parent settings.
@@ -87,7 +88,10 @@ internal class SettingsDetailPage(
         primary: Boolean = false,
         onClick: () -> Unit
     ): SettingsActionTile {
-        val tile = SettingsDecor.action(activity, title, subtitle, primary, onClick)
+        val tile = SettingsDecor.action(activity, title, subtitle, primary) {
+            if (ParentSession.authorized()) onClick()
+            else activity.finish()
+        }
         body.addView(tile, LinearLayout.LayoutParams(-1, -2).apply {
             bottomMargin = TvUi.dp(activity, if (handheld) 8 else 12)
         })
@@ -126,6 +130,10 @@ internal class SettingsDetailPage(
             details.visibility = if (open) View.VISIBLE else View.GONE
         }
         trigger.setOnClickListener {
+            if (!ParentSession.authorized()) {
+                activity.finish()
+                return@setOnClickListener
+            }
             val open = details.visibility != View.VISIBLE
             details.visibility = if (open) View.VISIBLE else View.GONE
             trigger.setTitle(title + if (open) "  ▴" else "  ▾")

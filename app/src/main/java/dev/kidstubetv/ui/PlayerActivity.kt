@@ -364,7 +364,8 @@ class PlayerActivity : Activity() {
     private fun loadAt(newPosition: Int) {
         if (newPosition !in ids.indices) {
             revealControls()
-            videoTitle.text = "本次播放结束啦！"
+            videoTitle.text = if (newPosition < 0) "这已经是第一条视频"
+                else "这已经是最后一条视频"
             return
         }
         cancelNext()
@@ -450,16 +451,32 @@ class PlayerActivity : Activity() {
         }
     }
 
+    /** Manual play and seek are subject to the same fail-closed IFrame gate as
+     * automatic playback. The native callback may report a stale video ID. */
+    private fun canControlCurrentFrame(): Boolean = PlayerActionPolicy.canControl(
+        visibleToUser = visibleToUser,
+        videoApproved = approvedVideoId != null,
+        reportedVideoMatches = iframeVideoGate.isCurrent(),
+        vpnReady = ProxyStatus.phase == ProxyStatus.Phase.READY,
+        hasTime = clock.remaining(settings.dailyLimitMinutes) > 0
+    )
+
     private fun togglePlayback() {
         if (needsManualRetry && ProxyStatus.phase == ProxyStatus.Phase.READY) {
-            // loadAt rechecks madeForKids, embeddability, channel allowlist and time.
+            // Retry always re-enters the API metadata + whitelist gate.
             loadAt(position)
             return
         }
-        if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
-            pauseOnVpnLost(); return
+        if (!canControlCurrentFrame()) {
+            player?.pause()
+            playing = false
+            if (ProxyStatus.phase != ProxyStatus.Phase.READY) pauseOnVpnLost()
+            else if (clock.remaining(settings.dailyLimitMinutes) <= 0)
+                videoTitle.text = "今天的观看时间已经用完啦"
+            else if (admissionPending || !iframeVideoGate.isCurrent())
+                videoTitle.text = "正在确认视频审核和播放器状态…"
+            return
         }
-        if (clock.remaining(settings.dailyLimitMinutes) <= 0) { player?.pause(); return }
         player?.let { if (playing) it.pause() else it.play() }
     }
 
@@ -546,13 +563,12 @@ class PlayerActivity : Activity() {
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
+                    if (canControlCurrentFrame())
                         player?.seekTo((positionSeconds - 10f).coerceAtLeast(0f))
-                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (ProxyStatus.phase == ProxyStatus.Phase.READY) player?.seekTo(positionSeconds + 10f)
+                    if (canControlCurrentFrame()) player?.seekTo(positionSeconds + 10f)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {

@@ -90,8 +90,8 @@ internal object DenseSettingsUi {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
 
         }
-        val left = pane(context, leftTitle, leftHint)
-        val right = pane(context, rightTitle, rightHint)
+        val left = pane(context, leftTitle, leftHint).apply { tag = "settings-pane-left" }
+        val right = pane(context, rightTitle, rightHint).apply { tag = "settings-pane-right" }
         if (horizontal) {
             container.addView(left, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 rightMargin = dp(context, 10)

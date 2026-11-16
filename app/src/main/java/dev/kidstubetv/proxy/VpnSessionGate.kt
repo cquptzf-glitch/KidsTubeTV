@@ -10,6 +10,7 @@ class VpnSessionGate {
         running = true
         return generation
     }
+    @Synchronized fun isActive(): Boolean = running
     @Synchronized fun current(id: Long) = running && generation == id
     @Synchronized fun stop(): Boolean {
         generation++

@@ -204,7 +204,8 @@ class SettingsActivity : Activity() {
         }
         right.addView(summary)
         setupTile = SettingsDecor.action(this, "继续配置", "完成下一步初始化", true) {
-            advanceSetup()
+            if (store.hasPin && !ParentSession.authorized()) finish()
+            else advanceSetup()
         }
         right.addView(setupTile, LinearLayout.LayoutParams(-1, -2).apply {
             bottomMargin = TvUi.dp(this@SettingsActivity, 7)
@@ -251,7 +252,10 @@ class SettingsActivity : Activity() {
             setPadding(spacing, 0, spacing, 0)
             setTextColor(TvUi.text)
             background = SettingsDecor.navShape(this@SettingsActivity, index == 0, false)
-            setOnClickListener { showSection(index, moveFocus = !handheld) }
+            setOnClickListener {
+                if (store.hasPin && !ParentSession.authorized()) { finish(); return@setOnClickListener }
+                showSection(index, moveFocus = !handheld)
+            }
             setOnFocusChangeListener { _, focused ->
                 background = SettingsDecor.navShape(this@SettingsActivity,
                     selectedSection == index, focused)
@@ -370,7 +374,10 @@ class SettingsActivity : Activity() {
         primary: Boolean = false,
         callback: () -> Unit
     ): SettingsActionTile {
-        val tile = SettingsDecor.action(this, title, hint, primary, callback)
+        val tile = SettingsDecor.action(this, title, hint, primary) {
+            if (store.hasPin && !ParentSession.authorized()) finish()
+            else callback()
+        }
         panel.addView(tile, LinearLayout.LayoutParams(-1, -2).apply {
             bottomMargin = TvUi.dp(this@SettingsActivity, 6)
         })
@@ -382,6 +389,10 @@ class SettingsActivity : Activity() {
             advanced.visibility = if (advanced.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
         button.setOnClickListener {
+            if (store.hasPin && !ParentSession.authorized()) {
+                finish()
+                return@setOnClickListener
+            }
             val open = advanced.visibility != View.VISIBLE
             advanced.visibility = if (open) View.VISIBLE else View.GONE
             button.setTitle(title + if (open) "  ▴" else "  ▾")
@@ -744,7 +755,23 @@ class SettingsActivity : Activity() {
         action(api, "添加 YouTube 频道", "粘贴频道链接或 @handle") {
             addChannelFromLink()
         }
-        DenseSettingsUi.line(this, api, "内容审核", "无论使用哪种授权都需白名单")
+        action(api, "清除 API Key / 改用 Google 授权",
+            "清空已保存的 Key，已登录的 Google 账号随后用于目录查询") {
+            if (store.apiKey.isBlank()) {
+                accountSummary.text = "当前没有保存的 API Key"
+            } else {
+                AlertDialog.Builder(this).setTitle("清除 YouTube API Key？")
+                    .setMessage("本机将不再使用此 Key 查询目录。如已授权 Google 账号，则自动改用该授权。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("清除 Key") { _, _ ->
+                        if (ParentSession.authorized()) {
+                            store.apiKey = ""
+                            refreshSummaries()
+                        }
+                    }.show()
+            }
+        }
+        DenseSettingsUi.line(this, api, "筛查方式", "儿童标记 + 可嵌入 + 家长白名单")
     }
 
     private fun advanceSetup() {
@@ -855,8 +882,11 @@ class SettingsActivity : Activity() {
             ProxyStatus.Phase.STARTING -> "正在准备应用专属网络，不影响其他应用路由"
             else -> if (store.hasProfile) "仅 KidsTubeTV 使用 VPN，点击连接" else "点击后直接填写订阅链接"
         })
-        accountSummary.text = if (GoogleTvAuth(this).isLinked) "Google 已授权（只读 YouTube 资料）"
-            else "未登录 Google；也可使用 YouTube API Key 浏览"
+        accountSummary.text = when {
+            store.apiKey.isNotBlank() -> "当前使用 YouTube API Key 查询目录；Google 授权可导入频道"
+            GoogleTvAuth(this).isLinked -> "当前使用 Google 授权查询目录（只读）"
+            else -> "尚未配置 YouTube API Key 或 Google 授权"
+        }
         // The overview and category metrics stay in sync after each action.
         overviewStats.getOrNull(0)?.text = when (ProxyStatus.phase) {
             ProxyStatus.Phase.READY -> "已连接"
@@ -1128,17 +1158,31 @@ class SettingsActivity : Activity() {
         val request = subscriptionProbeRequests.begin()
         val vpnReady = ProxyStatus.phase == ProxyStatus.Phase.READY
         networkState.text = "◌ 正在检测订阅…"
-        networkDetail.text = "验证 HTTP 与配置格式，不会保存或修改旧配置"
+        networkDetail.text = "检测 HTTPS 下载、转换格式和 Mihomo 内核实际解析，不保存配置"
         Thread({
-            val result = SubscriptionProbe().check(url, vpnReady)
+            val result = runCatching {
+                val fetched = SubscriptionClient().fetchDetailed(url)
+                dev.kidstubetv.data.ProfileValidationClient.verify(
+                    applicationContext, fetched.yaml
+                )
+                fetched
+            }
             runOnUiThread {
                 if (isFinishing || isDestroyed || !screenStarted ||
                     !ParentSession.authorized() || store.subscriptionUrl != url ||
                     !subscriptionProbeRequests.isCurrent(request)) return@runOnUiThread
                 subscriptionProbeRunning = false
-                networkState.text = if (result.successful)
-                    "✓ 订阅接口与 YAML 校验通过" else "⚠ 订阅检测失败"
-                networkDetail.text = result.message
+                result.onSuccess { fetched ->
+                    networkState.text = "✓ 订阅和 Mihomo 内核校验通过"
+                    networkDetail.text = fetched.format + " · " +
+                        fetched.proxyCount + " 个节点/提供者" +
+                        (if (fetched.skippedCount > 0)
+                            "，忽略 " + fetched.skippedCount + " 个不支持节点" else "") +
+                        "。仅测试，未替换已有配置。"
+                }.onFailure { error ->
+                    networkState.text = "⚠ 订阅检测失败"
+                    networkDetail.text = SubscriptionFailurePolicy.describe(error, vpnReady)
+                }
             }
         }, "kids-subscription-probe").start()
     }
