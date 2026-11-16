@@ -35,13 +35,13 @@ internal class SettingsActionTile(
 ) : LinearLayout(context) {
     private val titleText = TextView(context).apply {
         text = title
-        textSize = if (UiDevice.isHandheld(context)) 16f else 19f
+        textSize = if (UiDevice.isHandheld(context)) 15f else 16f
         setTextColor(if (emphasized) 0xFF182C31.toInt() else TvUi.text)
         gravity = Gravity.CENTER_VERTICAL
     }
     private val subtitleText = TextView(context).apply {
         text = subtitle
-        textSize = if (UiDevice.isHandheld(context)) 13f else 14f
+        textSize = if (UiDevice.isHandheld(context)) 12f else 13f
         setTextColor(if (emphasized) 0xFF365756.toInt() else TvUi.muted)
         gravity = Gravity.CENTER_VERTICAL
         maxLines = 2
@@ -51,10 +51,10 @@ internal class SettingsActionTile(
         orientation = VERTICAL
         isFocusable = true
         isClickable = true
-        minimumHeight = TvUi.dp(context, if (UiDevice.isHandheld(context)) 64 else 78)
-        val pad = if (UiDevice.isHandheld(context)) 13 else 20
-        setPadding(TvUi.dp(context, pad), TvUi.dp(context, 9),
-            TvUi.dp(context, pad), TvUi.dp(context, 9))
+        minimumHeight = TvUi.dp(context, if (UiDevice.isHandheld(context)) 54 else 62)
+        val pad = if (UiDevice.isHandheld(context)) 12 else 14
+        setPadding(TvUi.dp(context, pad), TvUi.dp(context, 7),
+            TvUi.dp(context, pad), TvUi.dp(context, 7))
         addView(titleText)
         addView(subtitleText)
         background = shape(false)
