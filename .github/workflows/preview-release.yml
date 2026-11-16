@@ -5,15 +5,15 @@ on:
       version_name:
         description: 'Pre-release version (without v prefix)'
         required: true
-        default: '0.3.0-beta.12'
+        default: '0.3.0-beta.13'
       version_code:
         description: 'Increasing Android versionCode'
         required: true
-        default: '22'
+        default: '23'
       preview_suffix:
         description: 'Isolated package suffix when no private preview signer is configured'
         required: true
-        default: '.preview.b12'
+        default: '.preview.b13'
   # Allow a vetted version request committed directly to main to publish a
   # preview even when GitHub Actions workflow_dispatch is not API-accessible.
   push:
@@ -79,6 +79,8 @@ jobs:
           KIDSTUBE_PREVIEW_KEY_ALIAS: ${{ secrets.KIDSTUBE_PREVIEW_KEY_ALIAS }}
           KIDSTUBE_PREVIEW_KEY_PASSWORD: ${{ secrets.KIDSTUBE_PREVIEW_KEY_PASSWORD }}
         run: bash scripts/prepare-preview-signing.sh
+      - name: Audit UI action handlers and child screening hooks
+        run: python3 scripts/check-ui-wiring.py
       - name: Download and verify pinned libmihomo AAR
         run: bash scripts/fetch-mihomo.sh
       - name: Lint, unit tests and signed preview APK
@@ -133,29 +135,39 @@ jobs:
           This preview is built directly from the latest main branch with
           the pinned **oviron/libmihomo-android v0.3.13** core, not FlClash.
 
-          ## Fixes in v0.3.0-beta.12
-          - Fix online Clash subscription ingestion: normalize Clash/Mihomo YAML,
-            common Base64 share-link lists, VLESS, VMess, Shadowsocks, Trojan,
-            Hysteria2 and supported SIP008 JSON into a loadable YAML profile.
-          - Accept FlClash desktop-exported YAML after safely disabling
-            LAN exposure, remote controller and unused inbound proxy ports.
-          - Before saving a manual/imported/auto-updated profile, run the pinned
-            Mihomo core in an isolated validator process; failures preserve
-            the previous profile and show a credential-free error category.
-          - Improve Android document picker authorization and failure feedback.
-          - Include the approved dense V2 parent settings with direct subscription,
-            YAML import, node selection and diagnostics on the same network page.
-          - Rebuild JVM regression tests for Base64, reality, format compatibility,
-            desktop safety and error privacy.
+          ## Functional audit and fixes in v0.3.0-beta.13
+          - Audited primary Android TV and phone buttons against click handlers,
+            navigation, persisted state and service calls; add a CI source-level
+            UI wiring check and a detailed functional review document.
+          - Strengthen playback: remote/phone manual play and seek now require
+            matching approved YouTube IFrame video ID, active app VPN, visible
+            activity and remaining screen-time budget.
+          - Route all YouTube catalog candidates through one tested
+            madeForKids + embeddable + parent allowlist/blocklist gate.
+          - Fix TV remote leftward navigation within side-by-side settings panes.
+          - Run periodic subscription due checks every 15 minutes while the
+            app-only VPN remains connected; downloaded config applies on
+            next VPN reconnect, never as unsafe live hot-reload.
+          - Subscription no-save probe now validates the candidate using an
+            isolated pinned Mihomo core, not only HTTP/YAML shape checks.
+          - Add clear-API-Key action, allowing already linked Google OAuth to
+            become the catalog credential source.
+          - Verify parental session on sensitive settings/Google actions and
+            avoid displaying raw OAuth exceptions in the UI.
+          - Add regression tests for playback control, official YouTube video
+            metadata admission, TV focus routing, periodic updater and
+            privacy-preserving UI action links.
 
-          ## Verification and compatibility limits
-          - CI confirms Kotlin build, Lint, JVM tests and signed APK integrity.
-            Your private provider, device DNS/VPN startup and YouTube playback
-            are NOT verified by this workflow.
-          - An unsupported share-link protocol or transport may still require
-            exporting a full Mihomo YAML profile from FlClash.
-          - A provider blocked by the device's direct network may require local
-            YAML bootstrap, because the app's VPN is not available before setup.
+          ## Verified and unverified
+          - Android Lint, JVM tests, Kotlin compile, APK signing, Android 9+
+            compatibility and ARMv7/ARM64 packaging are checked by CI.
+          - TV WebView actual YouTube IFrame playback, private subscription
+            service networking, OAuth on a real Google account and true
+            child-age appropriateness are NOT proven by automated checks.
+          - Does NOT download video from unofficial sources or bypass
+            YouTube embedding restrictions.
+          - Re-run parent PIN, channel/video approval, blacklists, search,
+            content playback, VPN recovery and D-pad focus on target hardware.
 
           ## Previously introduced
           - Redesigned parent settings for TV remotes and phone touch controls:
