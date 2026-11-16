@@ -46,7 +46,7 @@ internal object DenseSettingsUi {
         chunks.forEach { chunk ->
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                baselineAligned = false
+
             }
             chunk.forEachIndexed { i, (label, value) ->
                 val item = LinearLayout(context).apply {
@@ -88,7 +88,7 @@ internal object DenseSettingsUi {
         )
         val container = LinearLayout(context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            baselineAligned = false
+
         }
         val left = pane(context, leftTitle, leftHint)
         val right = pane(context, rightTitle, rightHint)
