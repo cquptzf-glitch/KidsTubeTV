@@ -125,6 +125,10 @@ class GoogleAccountActivity : Activity() {
             background = SettingsDecor.statusShape(this@GoogleAccountActivity)
         }
         credentialsToggle.setOnClickListener {
+            if (!ParentSession.authorized()) {
+                finish()
+                return@setOnClickListener
+            }
             val open = credentialsPane.visibility != View.VISIBLE
             credentialsPane.visibility = if (open) View.VISIBLE else View.GONE
             credentialsToggle.setTitle("OAuth 客户端配置  " + if (open) "▴" else "▾")
@@ -147,6 +151,7 @@ class GoogleAccountActivity : Activity() {
         credentialsPane.addView(clientSecret, LinearLayout.LayoutParams(-1, -2))
         TvUi.space(credentialsPane, this, 9)
         credentialsPane.addView(TvUi.primaryButton(this, "保存客户端配置") {
+            if (!ParentSession.authorized()) { finish(); return@primaryButton }
             if (saveCredentials()) {
                 credentialsPane.visibility = View.GONE
                 credentialsToggle.setTitle("OAuth 客户端配置  ▾")
@@ -163,6 +168,7 @@ class GoogleAccountActivity : Activity() {
                 .setMessage("删除本机授权令牌，但不删除已经批准给孩子的频道。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("退出授权") { _, _ ->
+                    if (!ParentSession.authorized()) { finish(); return@setPositiveButton }
                     cancel?.set(true)
                     challengeDialog?.dismiss()
                     challengeDialog = null
@@ -175,6 +181,7 @@ class GoogleAccountActivity : Activity() {
     }
 
     private fun saveCredentials(): Boolean = runCatching {
+        check(ParentSession.authorized()) { "家长授权已过期" }
         val changed = auth.configureClient(
             clientId.text.toString(), clientSecret.text.toString()
         )
@@ -195,6 +202,7 @@ class GoogleAccountActivity : Activity() {
     })
 
     private fun startAuth() {
+        if (!ParentSession.authorized()) { finish(); return }
         if (ProxyStatus.phase != ProxyStatus.Phase.READY) {
             status.text = "VPN 尚未就绪。请返回家长中心 → 网络与 VPN，先连接，再扫码授权"
             return
@@ -227,10 +235,8 @@ class GoogleAccountActivity : Activity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed || cancelled.get() || cancel !== cancelled)
                     return@runOnUiThread
-                result.onFailure { e ->
-                    status.text = "Google 登录失败：" +
-                        (e.message?.takeIf { it.length <= 160 && !it.contains("http") }
-                            ?: "请检查网络和客户端配置")
+                result.onFailure {
+                    status.text = "Google 登录失败：请检查设备码、客户端配置、网络和 YouTube API 权限"
                 }.onSuccess { freshAuthorization ->
                     status.text = if (freshAuthorization) {
                         "✓ Google 授权成功，可以选择订阅频道"
