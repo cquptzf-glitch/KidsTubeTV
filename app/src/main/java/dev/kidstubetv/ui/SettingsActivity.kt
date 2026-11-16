@@ -22,6 +22,9 @@ import android.widget.LinearLayout
 import android.widget.HorizontalScrollView
 import android.view.WindowManager
 import android.content.ClipboardManager
+import android.content.ClipData
+import android.content.ClipDescription
+import android.os.PersistableBundle
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
@@ -557,20 +560,37 @@ class SettingsActivity : Activity() {
             textSize = if (handheld) 13f else 14f
         }
         editActions.addView(paste, LinearLayout.LayoutParams(0,
-            TvUi.dp(this, if (handheld) 42 else 46), 1f))
+            TvUi.dp(this, if (handheld) 42 else 46), 0.92f))
+        val copy = TvUi.button(this, "复制") { copySubscriptionToClipboard() }.apply {
+            textSize = if (handheld) 13f else 14f
+        }
+        editActions.addView(copy, LinearLayout.LayoutParams(0,
+            TvUi.dp(this, if (handheld) 42 else 46), 0.92f).apply {
+            leftMargin = TvUi.dp(this@SettingsActivity, 4)
+        })
+        val clear = TvUi.button(this, "清空") {
+            inlineSubscriptionInput.setText("")
+            inlineSubscriptionInput.requestFocus()
+        }.apply {
+            textSize = if (handheld) 13f else 14f
+        }
+        editActions.addView(clear, LinearLayout.LayoutParams(0,
+            TvUi.dp(this, if (handheld) 42 else 46), 0.92f).apply {
+            leftMargin = TvUi.dp(this@SettingsActivity, 4)
+        })
         val cancel = TvUi.button(this, "取消") { hideSubscriptionEditor() }.apply {
             textSize = if (handheld) 13f else 14f
         }
         editActions.addView(cancel, LinearLayout.LayoutParams(0,
-            TvUi.dp(this, if (handheld) 42 else 46), 1f).apply {
-            leftMargin = TvUi.dp(this@SettingsActivity, 5)
+            TvUi.dp(this, if (handheld) 42 else 46), 0.92f).apply {
+            leftMargin = TvUi.dp(this@SettingsActivity, 4)
         })
-        val save = TvUi.primaryButton(this, "保存并下载") { saveInlineSubscription() }.apply {
+        val save = TvUi.primaryButton(this, "保存") { saveInlineSubscription() }.apply {
             textSize = if (handheld) 13f else 14f
         }
         editActions.addView(save, LinearLayout.LayoutParams(0,
-            TvUi.dp(this, if (handheld) 42 else 46), 1.6f).apply {
-            leftMargin = TvUi.dp(this@SettingsActivity, 5)
+            TvUi.dp(this, if (handheld) 42 else 46), 1.2f).apply {
+            leftMargin = TvUi.dp(this@SettingsActivity, 4)
         })
         inlineSubscriptionPanel.addView(editActions)
         subscription.addView(inlineSubscriptionPanel, LinearLayout.LayoutParams(-1, -2).apply {
@@ -1051,6 +1071,23 @@ class SettingsActivity : Activity() {
             inlineSubscriptionInput.setText(candidate)
             inlineSubscriptionInput.setSelection(inlineSubscriptionInput.text.length)
         }
+    }
+
+    private fun copySubscriptionToClipboard() {
+        if (!ParentSession.authorized()) return
+        val value = inlineSubscriptionInput.text.toString().trim()
+        if (value.isBlank()) {
+            inlineSubscriptionInput.error = "当前没有可复制的链接"
+            return
+        }
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("KidsTubeTV subscription", value)
+        if (Build.VERSION.SDK_INT >= 33) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+        manager.setPrimaryClip(clip)
     }
 
     private fun saveInlineSubscription() {
