@@ -266,8 +266,8 @@ class SettingsStore(context: Context) {
     ): Boolean = synchronized(PROFILE_LOCK) {
         if (subscriptionUrl != expectedUrl) return@synchronized false
         PROFILE_VERSION.installIfCurrent(expectedRevision) {
-            SubscriptionFormat.validateYaml(content)
-            ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
+            val sanitized = ClashProfilePolicy.normalize(content)
+            ProfileFileStore(profileFile).install(sanitized.toByteArray(Charsets.UTF_8))
             if (clearSelections) prefs.edit().remove("proxy_selections").apply()
             subscriptionUpdatedAt = System.currentTimeMillis()
         }
@@ -285,9 +285,9 @@ class SettingsStore(context: Context) {
 
     /** Local import and restore also invalidate any in-flight downloaded YAML. */
     fun writeProfile(content: String) = synchronized(PROFILE_LOCK) {
-        SubscriptionFormat.validateYaml(content)
+        val sanitized = ClashProfilePolicy.normalize(content)
         try {
-            ProfileFileStore(profileFile).install(content.toByteArray(Charsets.UTF_8))
+            ProfileFileStore(profileFile).install(sanitized.toByteArray(Charsets.UTF_8))
         } finally {
             PROFILE_VERSION.invalidate()
         }

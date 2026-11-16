@@ -20,6 +20,14 @@
 - **凭据保护：** API Key、OAuth 凭据/令牌、订阅地址使用 Android Keystore AES-GCM 存储；Mihomo YAML 放在私有目录但含有节点凭据，禁止上交版本库
 - **CI/CD：** push/PR 自动测试 + Debug APK Artifact；推送 `v*` 标签时通过仓库 Secrets 构建使用固定 `libmihomo-android` 的签名 APK、运行 Release Lint、验证签名、生成 SHA256SUMS 并发布 GitHub Release；需先设置固定签名密钥
 
+## 2026-11-16 Clash 订阅、YAML 导入和更新链路修复
+
+- **格式兼容：** 同时处理 Clash/Mihomo YAML、通用 Base64 节点列表、部分节点分享链接（VLESS/VMess/SS/Trojan/Hysteria2）以及 SIP008 Shadowsocks JSON；不支持的节点类型会给出明确提示，节点凭据不上传第三方转换站。
+- **安全归一化：** FlClash 桌面导出的 `allow-lan: true`、`mixed-port`、局域网 controller 和入站监听自动关闭，保留原有代理/组/规则；纯节点列表自动生成自动/手动代理组与 MATCH 规则。
+- **实际加载校验：** 添加独立 Android `:profilevalidator` 进程，调用与 VPN 相同的 `libmihomo-android v0.3.13 quickSetup`，仅内核解析通过才替换已保存配置；失败时保留旧配置和备份，返回脱敏故障类别。
+- **三条路径：** 主界面手动下载、应用 VPN 自动更新以及 Android 文件选择器导入均复用下载/归一化/校验逻辑。Android 系统文件选择器有明确的家长授权期限，过期时会提示而不静默丢弃选择。
+- **验证范围：** GitHub CI 跑 JVM HTTP/格式/安全/回滚测试、Kotlin 编译和 APK 验证；真实运营商网络、你的私人订阅、电视上 Mihomo TUN 与视频播放仍需要实机测试。代码中未保存私人订阅 token。
+
 ## 2026-11-16 家长设置 V2 高密度界面（获确认的 HTML 审查方案）
 
 - **布局：** 电视横屏固定左侧五分类导航，右侧包含状态、紧凑摘要统计与双栏设置组；手机顶部横向分类，功能按组改为单栏堆叠，统计卡 2×2。低分辨率电视自动降级单栏。TV 卡片高度约 62dp、手机约 54dp。

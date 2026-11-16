@@ -30,6 +30,10 @@
         <activity android:name=".ui.ProxyActivity" android:exported="false"/>
         <activity android:name=".ui.PlayerActivity" android:exported="false"/>
         <service
+            android:name=".proxy.ProfileValidationService"
+            android:exported="false"
+            android:process=":profilevalidator" />
+        <service
             android:name=".proxy.KidsVpnService"
             android:exported="true"
             android:permission="android.permission.BIND_VPN_SERVICE"

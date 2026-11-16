@@ -38,7 +38,7 @@ class SubscriptionClientTest {
                 if (connections.isEmpty()) 403 else 200,
                 yaml.toByteArray()).also(connections::add)
         }
-        assertEquals(yaml, downloader.fetch(link))
+        assertTrue(downloader.fetch(link).contains("type: direct"))
         assertEquals(listOf("FlClash", "ClashMetaForAndroid"),
             connections.map { it.getRequestProperty("User-Agent") })
     }
@@ -68,7 +68,7 @@ class SubscriptionClientTest {
             if (visited.size == 1) FakeConnection(url, 302, redirect = "/download?token=private")
             else FakeConnection(url, 200, gzipped, encoding = "gzip")
         }
-        assertEquals(yaml, client.fetch(link))
+        assertTrue(client.fetch(link).contains("type: direct"))
         assertEquals("https://provider.example/download?token=private", visited.last())
     }
 
@@ -92,24 +92,24 @@ class SubscriptionClientTest {
                 else yaml.toByteArray()
             ).also(connections::add)
         }
-        assertEquals(yaml, client.fetch(link))
+        assertTrue(client.fetch(link).contains("type: direct"))
         assertEquals(
             listOf("FlClash", "ClashMetaForAndroid", "clash.meta"),
             connections.map { it.getRequestProperty("User-Agent") }
         )
     }
 
-    @Test fun doesNotRetryUnsafeProfileOrUnauthorizedToken() {
+    @Test fun sanitizesDesktopProfileWithoutRetryingAndRejectsUnauthorizedToken() {
         var attempts = 0
-        val unsafe = SubscriptionClient { url ->
+        val downloader = SubscriptionClient { url ->
             attempts++
             FakeConnection(url, 200,
-                "allow-lan: true\nproxies:\n  - name: direct\n    type: direct\n".toByteArray())
+                "mixed-port: 7890\nallow-lan: true\nexternal-controller: 0.0.0.0:9090\nproxies:\n  - name: direct\n    type: direct\n".toByteArray())
         }
-        val rejected = assertThrows(SubscriptionDownloadException::class.java) {
-            unsafe.fetch(link)
-        }
-        assertEquals(SubscriptionProblem.UNSAFE_PROFILE, rejected.problem)
+        val safe = downloader.fetch(link)
+        assertTrue(safe.contains("allow-lan: false"))
+        assertTrue(safe.contains("mixed-port: 0"))
+        assertTrue(!safe.contains("external-controller"))
         assertEquals(1, attempts)
 
         var denied = 0
@@ -123,6 +123,20 @@ class SubscriptionClientTest {
         assertEquals(SubscriptionProblem.HTTP, unauthorized.problem)
         assertEquals(401, unauthorized.httpStatus)
         assertEquals(1, denied)
+    }
+
+    @Test fun downloadsBase64V2BoardLinksAndCreatesProxyGroups() {
+        val share = "vless://11111111-1111-1111-1111-111111111111@edge.example.net:443?security=tls&type=ws&path=%2Fws&sni=cdn.example.net#alpha"
+        val encoded = java.util.Base64.getEncoder().encodeToString(share.toByteArray())
+        val downloader = SubscriptionClient { url ->
+            FakeConnection(url, 200, encoded.toByteArray())
+        }
+        val result = downloader.fetchDetailed(link)
+        assertEquals("Base64 节点列表", result.format)
+        assertEquals(1, result.proxyCount)
+        assertTrue(result.yaml.contains("type: vless"))
+        assertTrue(result.yaml.contains("proxy-groups:"))
+        assertTrue(result.yaml.contains("MATCH,KidsTubeTV"))
     }
 
     @Test fun stopsOnRateLimitsWithoutRepeatedRequests() {

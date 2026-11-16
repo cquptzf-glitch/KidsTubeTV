@@ -79,6 +79,6 @@ class SubscriptionProbeTest {
         }
         val result = SubscriptionProbe(client).check(sampleUrl, vpnReady = true)
         assertFalse(result.successful)
-        assertTrue(result.message.contains("Base64"))
+        assertTrue(result.message.contains("不受本次转换支持"))
     }
 }

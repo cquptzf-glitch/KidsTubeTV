@@ -50,21 +50,24 @@ class ParentUnlockTicketTest {
         assertFalse(ticket.authorized())
     }
 
-    @Test fun systemPickerKeepsOriginalShorterAuthorizationBoundary() {
+    @Test fun documentPickerUsesExplicitBoundedGraceAndThenExpires() {
         var clock = 100L
         val ticket = ParentUnlockTicket({ clock }, idleTimeoutMs = 200L, backgroundGraceMs = 500L)
         ticket.unlock()
+        clock = 290L
         ticket.allowExternalUi()
         ticket.onBackground()
-        clock = 299L
+        clock = 700L
         assertTrue(ticket.externalUiAuthorized())
         ticket.onForeground()
         ticket.endExternalUi()
         assertTrue(ticket.authorized())
-        clock = 301L
+
+        clock = 1000L
+        ticket.unlock()
         ticket.allowExternalUi()
         ticket.onBackground()
-        clock = 502L
+        clock = 1500L
         assertFalse(ticket.externalUiAuthorized())
         ticket.onForeground()
         assertFalse(ticket.authorized())

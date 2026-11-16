@@ -1128,7 +1128,7 @@ class SettingsActivity : Activity() {
         val request = subscriptionProbeRequests.begin()
         val vpnReady = ProxyStatus.phase == ProxyStatus.Phase.READY
         networkState.text = "◌ 正在检测订阅…"
-        networkDetail.text = "仅检测 HTTPS 下载与 Clash YAML 格式，不会改动已有配置"
+        networkDetail.text = "验证 HTTP 与配置格式，不会保存或修改旧配置"
         Thread({
             val result = SubscriptionProbe().check(url, vpnReady)
             runOnUiThread {
@@ -1158,10 +1158,17 @@ class SettingsActivity : Activity() {
         Thread({
             val result = try {
                 runCatching {
-                    val yaml = SubscriptionClient().fetch(url)
+                    val profile = SubscriptionClient().fetchDetailed(url)
+                    // Only the disposable verifier may load a candidate into
+                    // Mihomo. Keep the old profile until native parsing succeeds.
+                    dev.kidstubetv.data.ProfileValidationClient.verify(
+                        applicationContext, profile.yaml
+                    )
                     check(store.installFetchedSubscription(
-                        url, subscriptionRevision, yaml, clearSelections = providerChanged
+                        url, subscriptionRevision, profile.yaml,
+                        clearSelections = providerChanged
                     )) { "订阅已被新的配置替换，本次下载结果已作废" }
+                    profile
                 }.onFailure { failure ->
                     // Never stamp an old request's error over a newer profile.
                     store.recordSubscriptionFailureIfCurrent(
@@ -1178,9 +1185,12 @@ class SettingsActivity : Activity() {
                 // The background download may finish after the parent left
                 // Settings. Never launch a VPN consent dialog over another app.
                 if (!screenStarted || !ParentSession.authorized()) return@runOnUiThread
-                result.onSuccess {
-                    networkState.text = "✓ 订阅下载并校验成功"
-                    networkDetail.text = "配置已保存，可在下次连接 VPN 时生效"
+                result.onSuccess { profile ->
+                    networkState.text = "✓ 订阅下载及 Mihomo 内核校验成功"
+                    networkDetail.text = profile.format + " · " +
+                        profile.proxyCount + " 个节点/提供者" +
+                        (if (profile.skippedCount > 0) " · 跳过 " + profile.skippedCount + " 个不支持节点" else "") +
+                        "。配置已保存，下次连接 VPN 时生效"
                     if (ParentSession.authorized() &&
                         ProxyStatus.phase == ProxyStatus.Phase.READY) {
                         AlertDialog.Builder(this)
@@ -1199,7 +1209,7 @@ class SettingsActivity : Activity() {
                     networkState.text = "⚠ 订阅更新失败"
                     networkDetail.text = store.subscriptionUpdateIssue +
                         if (store.hasProfile) "\n已保留之前可用的配置"
-                        else "\n尚无有效 YAML，可在更多网络设置中导入本地配置"
+                        else "\n尚无有效配置，请使用当前页面的「导入本地 YAML」"
                 }
             }
         }, "kids-subscription-manual").start()
@@ -1312,10 +1322,21 @@ class SettingsActivity : Activity() {
             return
         }
         if (request != REQUEST_YAML) return
-        val permitted = ParentSession.authorized()
+        val permitted = ParentSession.externalUiAuthorized()
         ParentSession.endExternalUi()
-        if (!permitted || code != RESULT_OK) return
-        val uri = data?.data ?: return
+        if (!permitted) {
+            networkState.text = "⚠ 家长验证已过期"
+            networkDetail.text = "文件选择时间过长，请重新解锁后导入"
+            return
+        }
+        if (code != RESULT_OK) {
+            networkDetail.text = "已取消文件选择，原配置未修改"
+            return
+        }
+        val uri = data?.data ?: run {
+            networkDetail.text = "未选择配置文件"
+            return
+        }
         if (!dev.kidstubetv.proxy.SubscriptionUpdateGate.tryAcquire()) {
             networkState.text = "已有订阅更新正在运行，请稍后导入"
             return
@@ -1324,20 +1345,27 @@ class SettingsActivity : Activity() {
         Thread({
             val result = try {
                 runCatching {
-                    contentResolver.openInputStream(uri).use { stream ->
-                    requireNotNull(stream) { "无法读取配置文件" }
                     val output = ByteArrayOutputStream()
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        val n = stream.read(buffer)
-                        if (n == -1) break
-                        require(output.size() + n <= SubscriptionFormat.MAX_PROFILE_BYTES) {
-                            "配置文件超过 1 MB"
+                    contentResolver.openInputStream(uri).use { stream ->
+                        requireNotNull(stream) { "无法读取配置文件" }
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val n = stream.read(buffer)
+                            if (n == -1) break
+                            require(output.size() + n <= SubscriptionFormat.MAX_PROFILE_BYTES) {
+                                "配置文件超过 4 MiB"
+                            }
+                            output.write(buffer, 0, n)
                         }
-                        output.write(buffer, 0, n)
                     }
-                        store.writeProfile(output.toString(Charsets.UTF_8.name()))
-                    }
+                    // Same format handling as online subscriptions; accepts
+                    // FlClash YAML and common Base64/share-link exports.
+                    val profile = dev.kidstubetv.data.SubscriptionContentNormalizer
+                        .normalize(output.toString(Charsets.UTF_8.name()))
+                    dev.kidstubetv.data.ProfileValidationClient.verify(
+                        applicationContext, profile.yaml
+                    )
+                    store.writeProfile(profile.yaml)
                     store.subscriptionUpdatedAt = System.currentTimeMillis()
                     // Imported local YAML supersedes any previously scheduled URL refresh.
                     store.subscriptionUrl = ""
@@ -1350,8 +1378,8 @@ class SettingsActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 refreshSummaries()
                 result.onSuccess {
-                    networkState.text = "✓ 本地配置已导入"
-                    networkDetail.text = "下次启动 VPN 时生效"
+                    networkState.text = "✓ 配置已导入并通过 Mihomo 内核校验"
+                    networkDetail.text = "下次连接 VPN 时生效；已保留可恢复的旧配置"
                 }.onFailure { error ->
                     networkState.text = "⚠ YAML 导入失败"
                     networkDetail.text = SubscriptionFailurePolicy.describe(

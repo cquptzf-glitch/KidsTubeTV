@@ -53,7 +53,9 @@ class SubscriptionClient(
      * incompatibilities and explicit UA-related HTTP refusal. Never retry
      * network errors, expired tokens, unsafe profiles or rate limits.
      */
-    fun fetch(input: String): String {
+    fun fetch(input: String): String = fetchDetailed(input).yaml
+
+    internal fun fetchDetailed(input: String): SubscriptionFetchResult {
         val normalized = SubscriptionFormat.normalizeUrl(input)
         val agents = SubscriptionRequestPolicy.userAgents
         for ((index, agent) in agents.withIndex()) {
@@ -67,7 +69,7 @@ class SubscriptionClient(
         throw SubscriptionDownloadException(SubscriptionProblem.UNKNOWN)
     }
 
-    private fun download(input: String, agent: String): String {
+    private fun download(input: String, agent: String): SubscriptionFetchResult {
         var current = input
         repeat(4) { hop ->
             val connection = openConnection(URL(current))
@@ -113,9 +115,8 @@ class SubscriptionClient(
                         output.write(buffer, 0, n)
                     }
                 }
-                val yaml = output.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF")
-                SubscriptionResponsePolicy.validate(yaml)
-                return yaml
+                val body = output.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF")
+                return SubscriptionContentNormalizer.normalize(body)
             } finally {
                 connection.disconnect()
             }

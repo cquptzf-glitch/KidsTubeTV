@@ -1,46 +1,100 @@
 package dev.kidstubetv.data
 
+import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.constructor.SafeConstructor
 
 /**
- * Parse untrusted subscription YAML with bounded, safe construction.
- * KidsTubeTV runs a per-app VPN; it must not expose a management API to the LAN.
+ * Turn an untrusted Clash/FlClash export into a safe app-only Mihomo profile.
+ *
+ * Desktop exports often expose mixed-port, allow-lan and an external controller.
+ * KidsTubeTV owns an Android app-scoped TUN; inbound/listener ports are never
+ * needed. Normalize these values rather than rejecting otherwise valid YAML.
  */
 object ClashProfilePolicy {
-    fun validate(content: String) {
-        require(content.length in 12..SubscriptionFormat.MAX_PROFILE_BYTES) {
-            "配置应在 12 B 至 1 MiB 之间"
+    private fun read(content: String): Map<*, *> {
+        val bytes = content.toByteArray(Charsets.UTF_8).size
+        require(bytes in 12..SubscriptionFormat.MAX_PROFILE_BYTES) {
+            "配置文件必须为 12 字节至 4 MiB"
         }
-        val options = LoaderOptions().apply {
+        val opts = LoaderOptions().apply {
             isAllowDuplicateKeys = false
             maxAliasesForCollections = 20
-            codePointLimit = SubscriptionFormat.MAX_PROFILE_BYTES
             nestingDepthLimit = 40
+            codePointLimit = SubscriptionFormat.MAX_PROFILE_BYTES
         }
-        val root = runCatching {
-            Yaml(SafeConstructor(options)).load<Any?>(content)
-        }.getOrElse {
-            throw IllegalArgumentException("Clash YAML 语法错误、重复字段或复杂度过高", it)
-        } as? Map<*, *> ?: throw IllegalArgumentException("Clash 配置必须是 YAML 对象")
+        val root = try {
+            Yaml(SafeConstructor(opts)).load<Any?>(content)
+        } catch (_: Exception) {
+            throw IllegalArgumentException("YAML 语法、重复字段或复杂度不符合要求")
+        }
+        return root as? Map<*, *>
+            ?: throw IllegalArgumentException("Clash 配置根节点必须是 YAML 对象")
+    }
 
+    fun normalize(input: String): String {
+        val original = input.removePrefix("\uFEFF")
+        val root = read(original)
         val nodes = root["proxies"] as? List<*>
         val providers = root["proxy-providers"] as? Map<*, *>
         require(!nodes.isNullOrEmpty() || !providers.isNullOrEmpty()) {
-            "未找到可用的 proxies 或 proxy-providers；不支持 Base64 节点订阅"
+            "配置中没有 proxies 或 proxy-providers"
         }
-        require(root["allow-lan"]?.toString()?.equals("true", ignoreCase = true) != true) {
-            "配置启用了 allow-lan，不能在儿童电视上开放局域网代理端口"
+
+        val copy = linkedMapOf<String, Any?>()
+        for ((key, value) in root) {
+            if (key !is String) throw IllegalArgumentException("配置根字段必须是字符串")
+            copy[key] = value
         }
-        for (field in listOf("external-controller", "external-controller-tls")) {
-            val raw = root[field]?.toString()?.trim().orEmpty()
-            require(raw.isEmpty() ||
-                raw.startsWith("127.0.0.1:") ||
-                raw.startsWith("[::1]:") ||
-                raw.startsWith("localhost:", ignoreCase = true)) {
-                "$field 不允许对局域网或公网开放"
+
+        // Remove any desktop inbound/control APIs that would be inappropriate
+        // on a TV. No LAN-facing management or local proxy listener is needed.
+        copy["allow-lan"] = false
+        copy["bind-address"] = "127.0.0.1"
+        for (key in listOf("port", "socks-port", "mixed-port", "redir-port", "tproxy-port")) {
+            copy[key] = 0
+        }
+        for (key in listOf(
+            "external-controller", "external-controller-tls", "external-ui",
+            "external-ui-url", "external-controller-cors", "secret",
+            "listeners", "tun", "ss-config", "vmess"
+        )) {
+            copy.remove(key)
+        }
+
+        // Bare share lists exported as YAML do not route traffic automatically.
+        // Keep any existing provider/groups/rules exactly as supplied.
+        val groups = copy["proxy-groups"] as? List<*>
+        if (groups.isNullOrEmpty() && !nodes.isNullOrEmpty()) {
+            val names = nodes.mapNotNull { (it as? Map<*, *>)?.get("name")?.toString() }
+                .filter(String::isNotBlank)
+            require(names.isNotEmpty()) { "proxies 缺少节点名称" }
+            copy["proxy-groups"] = listOf(
+                mapOf("name" to "KidsTubeTV 自动选择", "type" to "url-test",
+                    "proxies" to names, "url" to "https://www.gstatic.com/generate_204",
+                    "interval" to 300),
+                mapOf("name" to "KidsTubeTV 手动选择", "type" to "select",
+                    "proxies" to (listOf("KidsTubeTV 自动选择") + names))
+            )
+            if ((copy["rules"] as? List<*>)?.isEmpty() != false) {
+                copy["rules"] = listOf("MATCH,KidsTubeTV 手动选择")
             }
         }
+
+        val dump = DumperOptions().apply {
+            defaultFlowStyle = DumperOptions.FlowStyle.BLOCK
+            isPrettyFlow = true
+            indent = 2
+            width = 120
+            lineBreak = DumperOptions.LineBreak.UNIX
+        }
+        val output = Yaml(dump).dump(copy)
+        require(output.toByteArray(Charsets.UTF_8).size <= SubscriptionFormat.MAX_PROFILE_BYTES) {
+            "安全处理后的 YAML 超过 4 MiB"
+        }
+        return output
     }
+
+    fun validate(content: String) { normalize(content) }
 }

@@ -32,12 +32,15 @@ class ParentUnlockTicket(
     }
 
     /**
-     * Android document pickers and OAuth browser handoffs are allowed only
-     * during the original idle ticket. This exception never lasts longer
-     * than the general app-switch grace period.
+     * A parent-initiated Android document picker / VPN consent has an explicit
+     * three-minute handoff window, separate from the shorter idle timer.
+     * Long picker interactions should not silently discard the selected YAML.
      */
     @Synchronized fun allowExternalUi() {
-        if (authorized() && backgroundUntil == 0L) externalUiUntil = expiresAt
+        if (authorized() && backgroundUntil == 0L) {
+            externalUiUntil = nowMs() + backgroundGraceMs
+            expiresAt = maxOf(expiresAt, externalUiUntil)
+        }
     }
 
     @Synchronized fun externalUiAuthorized(): Boolean =
@@ -48,13 +51,10 @@ class ParentUnlockTicket(
             lock()
             return
         }
-        // A system external-UI handoff gets the original tighter limit,
-        // while a normal HOME / app switch receives a short grace.
-        val limit = if (externalUiUntil != 0L) {
-            minOf(externalUiUntil, nowMs() + backgroundGraceMs)
-        } else {
-            nowMs() + backgroundGraceMs
-        }
+        // System pickers and normal app switches are both bounded. Only a
+        // parent-started system handoff can use its reserved deadline.
+        val limit = if (externalUiUntil != 0L) externalUiUntil
+            else nowMs() + backgroundGraceMs
         backgroundUntil = limit
         expiresAt = limit
     }

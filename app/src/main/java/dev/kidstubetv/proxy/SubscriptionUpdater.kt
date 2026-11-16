@@ -3,6 +3,7 @@ package dev.kidstubetv.proxy
 import android.content.Context
 import dev.kidstubetv.data.SettingsStore
 import dev.kidstubetv.data.SubscriptionClient
+import dev.kidstubetv.data.ProfileValidationClient
 
 /**
  * Auto-refresh uses the existing app-scoped VPN. File commits are conditional
@@ -25,10 +26,13 @@ object SubscriptionUpdater {
                 val url = current.subscriptionUrl
                 val revision = current.subscriptionRevision()
                 try {
-                    val yaml = SubscriptionClient().fetch(url)
+                    val profile = SubscriptionClient().fetchDetailed(url)
+                    // Auto-refresh uses the foreground VPN process. Verify in
+                    // an isolated native process before replacing its profile.
+                    ProfileValidationClient.verify(app, profile.yaml)
                     if (ProxyStatus.phase == ProxyStatus.Phase.READY) {
                         // No hot-reload: core reads the new YAML on the next start.
-                        current.installFetchedSubscription(url, revision, yaml)
+                        current.installFetchedSubscription(url, revision, profile.yaml)
                     }
                 } catch (failure: Exception) {
                     // Stale responses must never overwrite the next provider's
